@@ -1,0 +1,73 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'xcodeproj'
+require 'fileutils'
+
+root = File.expand_path('..', __dir__)
+project_path = File.join(root, 'RemoteCam.xcodeproj')
+FileUtils.rm_rf(project_path)
+
+project = Xcodeproj::Project.new(project_path)
+project.root_object.attributes['LastSwiftUpdateCheck'] = '2600'
+project.root_object.attributes['LastUpgradeCheck'] = '2600'
+
+app = project.new_target(:application, 'RemoteCam', :ios, '17.0')
+tests = project.new_target(:unit_test_bundle, 'RemoteCamTests', :ios, '17.0')
+
+sources_group = project.main_group.new_group('RemoteCam')
+Dir.glob(File.join(root, 'RemoteCam/Sources/**/*.swift')).sort.each do |path|
+  reference = sources_group.new_file(path.sub(root + '/', ''))
+  app.add_file_references([reference])
+end
+
+tests_group = project.main_group.new_group('RemoteCamTests')
+Dir.glob(File.join(root, 'RemoteCamTests/**/*.swift')).sort.each do |path|
+  reference = tests_group.new_file(path.sub(root + '/', ''))
+  tests.add_file_references([reference])
+end
+
+# Keep protocol/storage tests independent of an application host. This makes the
+# suite reliable on CI and avoids launching a camera-capable app in the simulator.
+Dir.glob(File.join(root, 'RemoteCam/Sources/{Models,Storage,Wire}/**/*.swift')).sort.each do |path|
+  reference = tests_group.new_file(path.sub(root + '/', ''))
+  tests.add_file_references([reference])
+end
+
+app.build_configurations.each do |config|
+  config.build_settings.merge!({
+    'ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS' => 'YES',
+    'CODE_SIGN_STYLE' => 'Automatic',
+    'CURRENT_PROJECT_VERSION' => '1',
+    'GENERATE_INFOPLIST_FILE' => 'NO',
+    'INFOPLIST_FILE' => 'RemoteCam/Configuration/Info.plist',
+    'IPHONEOS_DEPLOYMENT_TARGET' => '17.0',
+    'MARKETING_VERSION' => '1.0.0',
+    'PRODUCT_BUNDLE_IDENTIFIER' => 'org.remotecam.ios',
+    'PRODUCT_NAME' => '$(TARGET_NAME)',
+    'SWIFT_STRICT_CONCURRENCY' => 'complete',
+    'SWIFT_VERSION' => '6.0',
+    'TARGETED_DEVICE_FAMILY' => '1,2'
+  })
+end
+
+tests.build_configurations.each do |config|
+  config.build_settings.merge!({
+    'CODE_SIGN_STYLE' => 'Automatic',
+    'GENERATE_INFOPLIST_FILE' => 'YES',
+    'IPHONEOS_DEPLOYMENT_TARGET' => '17.0',
+    'PRODUCT_BUNDLE_IDENTIFIER' => 'org.remotecam.ios.tests',
+    'SWIFT_STRICT_CONCURRENCY' => 'complete',
+    'SWIFT_VERSION' => '6.0',
+    'TARGETED_DEVICE_FAMILY' => '1,2'
+  })
+end
+
+project.save
+
+scheme = Xcodeproj::XCScheme.new
+scheme.add_build_target(app)
+scheme.add_test_target(tests)
+scheme.save_as(project_path, 'RemoteCam', true)
+
+puts "Generated #{project_path}"

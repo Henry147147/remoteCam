@@ -58,12 +58,21 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Debug --output-on-failure
 
-  # Placeholder. Enable once ios/ exists. Builds only -- the simulator has no camera,
-  # so capture is verified on device by hand.
+  # The simulator validates the protocol/state-management suite and catches Swift 6
+  # concurrency regressions. Capture and hardware encoding still require the device
+  # verification documented in ios/README.md.
   ios-app:
     name: ios app
     runs-on: macos-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
-      - run: echo "TODO: xcodebuild of ios/RemoteCam"
+
+      - name: Build and test
+        working-directory: ios
+        run: >-
+          xcodebuild
+          -project RemoteCam.xcodeproj
+          -scheme RemoteCam
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest'
+          CODE_SIGNING_ALLOWED=NO
+          test

@@ -1,0 +1,497 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		11AC970DF00BB4D690960B84 /* RemoteHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2884D918950CAE2B0C541526 /* RemoteHost.swift */; };
+		17519AF23C49BC95E919D6A7 /* CBORTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8FF8939D8C6910EB0947E78 /* CBORTests.swift */; };
+		2B591E969A331B1ECDD472CC /* CBOR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98B4DEA1570621769F2EB575 /* CBOR.swift */; };
+		2BE74CE7DA048D1C42BE19C3 /* WireFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B404EECDFA3FF2F7F0234B8 /* WireFrame.swift */; };
+		4CD89E33244D808B01A4D045 /* WireFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 945132083AB37960B01978B7 /* WireFrameTests.swift */; };
+		59D488567817D4A488760510 /* RemoteHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02065B7B226A343BD711172E /* RemoteHost.swift */; };
+		6AEE9BA295E607CECB39057B /* StreamConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6649467AA842A3CA142E8DCB /* StreamConfiguration.swift */; };
+		85FE13050747B8C3273AFBD9 /* CBOR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 452FE1F053ADFEC69D899805 /* CBOR.swift */; };
+		8B89D13F97D15F7B80C93B40 /* WireFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 960AE9651464E7493A78C848 /* WireFrame.swift */; };
+		94BB570A900FAA62BD6D4555 /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8175A9F1B8F89AAE1D43502A /* BonjourBrowser.swift */; };
+		958522D8964C79A3931AD4C3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F36DDFBBFC45F0EA07B7A395 /* Foundation.framework */; };
+		997B2AF1E069B581C0BC4352 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37942C8AEDA178F4C403F601 /* AppModel.swift */; };
+		9B139779E575EE278EC5153D /* StreamConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4359D6DFC4B379F87DB36F /* StreamConfiguration.swift */; };
+		A0B4FFFEC3D0701ACBD3C3C0 /* RemoteCamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524DDF7E533AA53E3CD59F98 /* RemoteCamApp.swift */; };
+		A13B68E1CF33DC551133C253 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11B18E5BD03E1F333B9CFE3E /* RootView.swift */; };
+		A97B367F48517C27AD13F3E8 /* RecentHostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0E6A8E09C6C22133CA54B3 /* RecentHostsStore.swift */; };
+		BC3F4CFC26DA2D14C3956252 /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE47860B73DDE74745AECFE /* ControlMessage.swift */; };
+		C5911AAAE8E29477D130DA66 /* ManualConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9433141516FC96F3A0F80E /* ManualConnectionView.swift */; };
+		D3CEBF2DFF2DB0C4264DF746 /* RecentHostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE96B88B17D142337FB5C39C /* RecentHostsStore.swift */; };
+		DA627E7D692B5A62719C0860 /* RecentHostsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E8DBD31CC52919B22E34D4D /* RecentHostsStoreTests.swift */; };
+		E4B923764A28CB14CAC0BAEF /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F36DDFBBFC45F0EA07B7A395 /* Foundation.framework */; };
+		FA93B4E898BFE70592791321 /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED67EBD19A59FCA73330921 /* ControlMessage.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		02065B7B226A343BD711172E /* RemoteHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteHost.swift; path = RemoteCam/Sources/Models/RemoteHost.swift; sourceTree = "<group>"; };
+		11B18E5BD03E1F333B9CFE3E /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = RemoteCam/Sources/UI/RootView.swift; sourceTree = "<group>"; };
+		2884D918950CAE2B0C541526 /* RemoteHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteHost.swift; path = RemoteCam/Sources/Models/RemoteHost.swift; sourceTree = "<group>"; };
+		2EE47860B73DDE74745AECFE /* ControlMessage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControlMessage.swift; path = RemoteCam/Sources/Wire/ControlMessage.swift; sourceTree = "<group>"; };
+		37942C8AEDA178F4C403F601 /* AppModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppModel.swift; path = RemoteCam/Sources/App/AppModel.swift; sourceTree = "<group>"; };
+		3E8DBD31CC52919B22E34D4D /* RecentHostsStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStoreTests.swift; path = RemoteCamTests/RecentHostsStoreTests.swift; sourceTree = "<group>"; };
+		43B53B0F3BEBC185108E89A0 /* RemoteCamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemoteCamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		452FE1F053ADFEC69D899805 /* CBOR.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBOR.swift; path = RemoteCam/Sources/Wire/CBOR.swift; sourceTree = "<group>"; };
+		4E9433141516FC96F3A0F80E /* ManualConnectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ManualConnectionView.swift; path = RemoteCam/Sources/UI/ManualConnectionView.swift; sourceTree = "<group>"; };
+		524DDF7E533AA53E3CD59F98 /* RemoteCamApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamApp.swift; path = RemoteCam/Sources/App/RemoteCamApp.swift; sourceTree = "<group>"; };
+		5B404EECDFA3FF2F7F0234B8 /* WireFrame.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrame.swift; path = RemoteCam/Sources/Wire/WireFrame.swift; sourceTree = "<group>"; };
+		6649467AA842A3CA142E8DCB /* StreamConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamConfiguration.swift; path = RemoteCam/Sources/Models/StreamConfiguration.swift; sourceTree = "<group>"; };
+		7B4359D6DFC4B379F87DB36F /* StreamConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamConfiguration.swift; path = RemoteCam/Sources/Models/StreamConfiguration.swift; sourceTree = "<group>"; };
+		8175A9F1B8F89AAE1D43502A /* BonjourBrowser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BonjourBrowser.swift; path = RemoteCam/Sources/Discovery/BonjourBrowser.swift; sourceTree = "<group>"; };
+		945132083AB37960B01978B7 /* WireFrameTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrameTests.swift; path = RemoteCamTests/WireFrameTests.swift; sourceTree = "<group>"; };
+		960AE9651464E7493A78C848 /* WireFrame.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrame.swift; path = RemoteCam/Sources/Wire/WireFrame.swift; sourceTree = "<group>"; };
+		98B4DEA1570621769F2EB575 /* CBOR.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBOR.swift; path = RemoteCam/Sources/Wire/CBOR.swift; sourceTree = "<group>"; };
+		B7DE73D4415BB66B1BA963FC /* RemoteCam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RemoteCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BE96B88B17D142337FB5C39C /* RecentHostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStore.swift; path = RemoteCam/Sources/Storage/RecentHostsStore.swift; sourceTree = "<group>"; };
+		D8FF8939D8C6910EB0947E78 /* CBORTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBORTests.swift; path = RemoteCamTests/CBORTests.swift; sourceTree = "<group>"; };
+		DD0E6A8E09C6C22133CA54B3 /* RecentHostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStore.swift; path = RemoteCam/Sources/Storage/RecentHostsStore.swift; sourceTree = "<group>"; };
+		F36DDFBBFC45F0EA07B7A395 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		FED67EBD19A59FCA73330921 /* ControlMessage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControlMessage.swift; path = RemoteCam/Sources/Wire/ControlMessage.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6CA8F8F17322F768BECB5085 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E4B923764A28CB14CAC0BAEF /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F05BCFF6EE33F0403339C438 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				958522D8964C79A3931AD4C3 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		79E5F9C30B49B2C503816A6C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B68A9555827F1FB38C63A26E /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7E038C86583F2637FA934FF4 /* RemoteCamTests */ = {
+			isa = PBXGroup;
+			children = (
+				D8FF8939D8C6910EB0947E78 /* CBORTests.swift */,
+				3E8DBD31CC52919B22E34D4D /* RecentHostsStoreTests.swift */,
+				945132083AB37960B01978B7 /* WireFrameTests.swift */,
+				2884D918950CAE2B0C541526 /* RemoteHost.swift */,
+				6649467AA842A3CA142E8DCB /* StreamConfiguration.swift */,
+				DD0E6A8E09C6C22133CA54B3 /* RecentHostsStore.swift */,
+				98B4DEA1570621769F2EB575 /* CBOR.swift */,
+				FED67EBD19A59FCA73330921 /* ControlMessage.swift */,
+				5B404EECDFA3FF2F7F0234B8 /* WireFrame.swift */,
+			);
+			name = RemoteCamTests;
+			sourceTree = "<group>";
+		};
+		B68A9555827F1FB38C63A26E /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				F36DDFBBFC45F0EA07B7A395 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		BD15B4B52FEA27AC8DAB1862 /* RemoteCam */ = {
+			isa = PBXGroup;
+			children = (
+				37942C8AEDA178F4C403F601 /* AppModel.swift */,
+				524DDF7E533AA53E3CD59F98 /* RemoteCamApp.swift */,
+				8175A9F1B8F89AAE1D43502A /* BonjourBrowser.swift */,
+				02065B7B226A343BD711172E /* RemoteHost.swift */,
+				7B4359D6DFC4B379F87DB36F /* StreamConfiguration.swift */,
+				BE96B88B17D142337FB5C39C /* RecentHostsStore.swift */,
+				4E9433141516FC96F3A0F80E /* ManualConnectionView.swift */,
+				11B18E5BD03E1F333B9CFE3E /* RootView.swift */,
+				452FE1F053ADFEC69D899805 /* CBOR.swift */,
+				2EE47860B73DDE74745AECFE /* ControlMessage.swift */,
+				960AE9651464E7493A78C848 /* WireFrame.swift */,
+			);
+			name = RemoteCam;
+			sourceTree = "<group>";
+		};
+		E134D5FC5F27CA9E18B508AE /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B7DE73D4415BB66B1BA963FC /* RemoteCam.app */,
+				43B53B0F3BEBC185108E89A0 /* RemoteCamTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		EF766FC9B70CB40166FC7B62 = {
+			isa = PBXGroup;
+			children = (
+				E134D5FC5F27CA9E18B508AE /* Products */,
+				79E5F9C30B49B2C503816A6C /* Frameworks */,
+				BD15B4B52FEA27AC8DAB1862 /* RemoteCam */,
+				7E038C86583F2637FA934FF4 /* RemoteCamTests */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		57FFBDE26347785C0EDCDB37 /* RemoteCamTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7E03313EB55B05FC61856DBB /* Build configuration list for PBXNativeTarget "RemoteCamTests" */;
+			buildPhases = (
+				B632C25B9115C84CB4C8628B /* Sources */,
+				6CA8F8F17322F768BECB5085 /* Frameworks */,
+				073062E177306B9A93C163F7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RemoteCamTests;
+			productName = RemoteCamTests;
+			productReference = 43B53B0F3BEBC185108E89A0 /* RemoteCamTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		745C60EBF8205336C05DF9DF /* RemoteCam */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 52FF40BFF18E7601E31D7398 /* Build configuration list for PBXNativeTarget "RemoteCam" */;
+			buildPhases = (
+				CC5CCEF3A13370EA5F60115F /* Sources */,
+				F05BCFF6EE33F0403339C438 /* Frameworks */,
+				B2A25B45BF8ECC2F2220CC97 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RemoteCam;
+			productName = RemoteCam;
+			productReference = B7DE73D4415BB66B1BA963FC /* RemoteCam.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		94415A5DEA41CB8897592ECD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+			};
+			buildConfigurationList = EAD5E185C9E0B38DA8D01A12 /* Build configuration list for PBXProject "RemoteCam" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = EF766FC9B70CB40166FC7B62;
+			minimizedProjectReferenceProxies = 0;
+			preferredProjectObjectVersion = 100;
+			productRefGroup = E134D5FC5F27CA9E18B508AE /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				745C60EBF8205336C05DF9DF /* RemoteCam */,
+				57FFBDE26347785C0EDCDB37 /* RemoteCamTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		073062E177306B9A93C163F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2A25B45BF8ECC2F2220CC97 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B632C25B9115C84CB4C8628B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				17519AF23C49BC95E919D6A7 /* CBORTests.swift in Sources */,
+				DA627E7D692B5A62719C0860 /* RecentHostsStoreTests.swift in Sources */,
+				4CD89E33244D808B01A4D045 /* WireFrameTests.swift in Sources */,
+				11AC970DF00BB4D690960B84 /* RemoteHost.swift in Sources */,
+				6AEE9BA295E607CECB39057B /* StreamConfiguration.swift in Sources */,
+				A97B367F48517C27AD13F3E8 /* RecentHostsStore.swift in Sources */,
+				2B591E969A331B1ECDD472CC /* CBOR.swift in Sources */,
+				FA93B4E898BFE70592791321 /* ControlMessage.swift in Sources */,
+				2BE74CE7DA048D1C42BE19C3 /* WireFrame.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CC5CCEF3A13370EA5F60115F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				997B2AF1E069B581C0BC4352 /* AppModel.swift in Sources */,
+				A0B4FFFEC3D0701ACBD3C3C0 /* RemoteCamApp.swift in Sources */,
+				94BB570A900FAA62BD6D4555 /* BonjourBrowser.swift in Sources */,
+				59D488567817D4A488760510 /* RemoteHost.swift in Sources */,
+				9B139779E575EE278EC5153D /* StreamConfiguration.swift in Sources */,
+				D3CEBF2DFF2DB0C4264DF746 /* RecentHostsStore.swift in Sources */,
+				C5911AAAE8E29477D130DA66 /* ManualConnectionView.swift in Sources */,
+				A13B68E1CF33DC551133C253 /* RootView.swift in Sources */,
+				85FE13050747B8C3273AFBD9 /* CBOR.swift in Sources */,
+				BC3F4CFC26DA2D14C3956252 /* ControlMessage.swift in Sources */,
+				8B89D13F97D15F7B80C93B40 /* WireFrame.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		089628A377853E68F03A9913 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RemoteCam/Configuration/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		23EB460DC462E34E23F77E2B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		4CD58D4CC58867BC5C165D24 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.tests;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		65E4646ABAB87A31AABACF5A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RemoteCam/Configuration/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		EF9CBF0D498A0BCA2FD33E9D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		F4E4CD5D29F9C3B7157AEE6D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.tests;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		52FF40BFF18E7601E31D7398 /* Build configuration list for PBXNativeTarget "RemoteCam" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				089628A377853E68F03A9913 /* Release */,
+				65E4646ABAB87A31AABACF5A /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7E03313EB55B05FC61856DBB /* Build configuration list for PBXNativeTarget "RemoteCamTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F4E4CD5D29F9C3B7157AEE6D /* Release */,
+				4CD58D4CC58867BC5C165D24 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EAD5E185C9E0B38DA8D01A12 /* Build configuration list for PBXProject "RemoteCam" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EF9CBF0D498A0BCA2FD33E9D /* Debug */,
+				23EB460DC462E34E23F77E2B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 94415A5DEA41CB8897592ECD /* Project object */;
+}
