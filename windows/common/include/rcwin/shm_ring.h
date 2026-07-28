@@ -106,13 +106,30 @@ class FrameRing {
   bool valid() const { return view_ != nullptr; }
 
   // Publishes a frame. Never blocks. `bytes` must not exceed kRingSlotBytes.
+  //
+  // EXACTLY ONE PRODUCER. writeFrame advances the write sequence with a plain
+  // read-modify-write, so two processes publishing at once will interleave into the
+  // same slot and corrupt it. Nothing enforces this today -- see
+  // windows/API-NOTES.md for the enforcement mechanism that was considered and
+  // deferred, since adding it would change this class's contract.
+  //
+  // Geometry in `info` is recorded as given and NOT validated here. That asymmetry is
+  // deliberate: a hostile producer would map the section and write it directly rather
+  // than call this, so validating on the write side would buy nothing. The check that
+  // matters is on the read side, below.
   HRESULT writeFrame(const uint8_t* src, uint32_t bytes, const FrameInfo& info);
 
   // Copies the most recent complete frame into `dst`.
   //   S_OK      a frame was copied and `info` describes it
-  //   S_FALSE   the ring is valid but nothing has ever been published
+  //   S_FALSE   nothing published yet, or the published frame's geometry is not
+  //             self-consistent and was rejected
   // A torn read is retried internally; only a persistently contended slot fails, which
   // in practice means the writer is producing faster than memcpy can keep up.
+  //
+  // On S_OK the caller may rely on `info` being internally consistent: even dimensions
+  // within the ring's limits, stride >= width, and stride*height*3/2 <= bytesUsed <=
+  // kRingSlotBytes. Consumers index their buffers with these values, so they are
+  // checked here rather than trusted -- the section is writable by any interactive user.
   HRESULT readLatest(uint8_t* dst, uint32_t dstCapacity, FrameInfo& info);
 
   // Milliseconds since the last publish, or UINT64_MAX if there has never been one.

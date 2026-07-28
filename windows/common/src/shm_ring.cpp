@@ -59,6 +59,32 @@ static_assert(std::atomic<uint64_t>::is_always_lock_free,
               "the seqlock requires lock-free 64-bit atomics; a lock-based atomic would "
               "embed a mutex in shared memory, which is not valid across processes");
 
+// Is this frame's geometry self-consistent and within the ring's limits?
+//
+// The header and slot metadata live in memory another process writes, and the DACL
+// deliberately grants write access to any interactive user. So these fields are input,
+// not state -- a producer that reports stride = 0x40000000 would otherwise walk every
+// consumer of this ring off the end of its own buffer. The first such consumer is
+// rc-vcam.dll running inside svchost.exe, where an access violation takes down the
+// Frame Server for every camera application on the machine.
+//
+// Validated here rather than in each consumer because this is the chokepoint: the OBS
+// plugin and the Qt preview will read the same ring later, and a check they each have
+// to remember to repeat is a check that will eventually be forgotten.
+bool geometryIsSane(const FrameInfo& info) {
+  if (info.width == 0 || info.height == 0) return false;
+  if (info.width > kRingMaxWidth || info.height > kRingMaxHeight) return false;
+  // NV12 is 4:2:0; odd dimensions have no valid chroma plane.
+  if (((info.width | info.height) & 1u) != 0) return false;
+  if (info.stride < info.width) return false;
+
+  // 64-bit throughout: stride and height are both attacker-controlled uint32, and the
+  // product overflows 32 bits long before it stops being plausible.
+  const uint64_t plane = static_cast<uint64_t>(info.stride) * info.height;
+  const uint64_t total = plane + plane / 2;
+  return total <= info.bytesUsed && info.bytesUsed <= kRingSlotBytes;
+}
+
 RingHeader* headerOf(void* view) { return static_cast<RingHeader*>(view); }
 
 uint8_t* slotOf(void* view, uint32_t index) {
@@ -172,9 +198,14 @@ HRESULT FrameRing::create(RingNames names) {
     h->magic = kRingMagic;
     RC_LOG(L"created ring %s (%llu bytes, %u slots)", names.section,
            static_cast<unsigned long long>(kSectionBytes), kRingSlots);
-  } else if (h->magic != kRingMagic || h->version != kRingVersion) {
-    RC_ERR(L"existing ring has magic 0x%08X version %u; expected 0x%08X version %u",
-           h->magic, h->version, kRingMagic, kRingVersion);
+  } else if (h->magic != kRingMagic || h->version != kRingVersion ||
+             h->slotCount != kRingSlots || h->slotBytes != kRingSlotBytes) {
+    // Same four fields open() checks. CreateFileMapping on an existing name returns the
+    // existing object and silently ignores both the requested size and the security
+    // attributes, so attaching is exactly the case where the layout must be re-verified
+    // rather than assumed from our own constants.
+    RC_ERR(L"existing ring has magic 0x%08X version %u slots %u; expected 0x%08X/%u/%u",
+           h->magic, h->version, h->slotCount, kRingMagic, kRingVersion, kRingSlots);
     close();
     return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
   } else {
@@ -307,6 +338,14 @@ HRESULT FrameRing::readLatest(uint8_t* dst, uint32_t dstCapacity, FrameInfo& inf
     candidate.ptsMicros = h->slotPts[slot].load(std::memory_order_relaxed);
     candidate.bytesUsed = bytes;
     candidate.writeSeq = seq;
+
+    // Checked before the copy, so a nonsensical frame costs nothing and -- more to the
+    // point -- is never handed to a caller that would act on its stride.
+    if (!geometryIsSane(candidate)) {
+      RC_WARN(L"rejecting frame with implausible geometry: %ux%u stride %u, %u bytes",
+              candidate.width, candidate.height, candidate.stride, candidate.bytesUsed);
+      return S_FALSE;
+    }
 
     std::memcpy(dst, slotOf(view_, slot), bytes);
 

@@ -277,6 +277,96 @@ void testRingBasics() {
         "oversized write rejected");
 }
 
+void testRingRejectsHostileGeometry() {
+  std::printf("Frame ring rejects implausible geometry\n");
+
+  // The section's DACL grants write access to any interactive user, so everything a
+  // producer reports is input rather than state. The consumer that matters is
+  // rc-vcam.dll inside svchost.exe: it indexes its scratch buffer by the reported
+  // stride, so a frame claiming stride 0x40000000 would walk it a gigabyte off the end
+  // and take the Frame Server -- and therefore every camera app on the machine -- down
+  // with it.
+  //
+  // writeFrame is used here to inject the bad metadata precisely because it does not
+  // validate; a real attacker would map the section and write it directly, so the
+  // defence has to live on the read side and that is what these cases exercise.
+  rcwin::FrameRing server;
+  if (FAILED(server.create(rcwin::testRingNames()))) {
+    check(false, "could not create the test ring");
+    return;
+  }
+  rcwin::FrameRing client;
+  if (FAILED(client.open(true, rcwin::testRingNames()))) {
+    check(false, "could not open the test ring");
+    return;
+  }
+
+  const rcwin::Nv12Layout layout = rcwin::nv12Layout(320, 240);
+  std::vector<uint8_t> frame(layout.totalSize, 0x5A);
+  const uint32_t bytes = static_cast<uint32_t>(frame.size());
+  std::vector<uint8_t> scratch(rcwin::kRingSlotBytes);
+  rcwin::FrameInfo got;
+
+  struct Hostile {
+    const char* name;
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride;
+  };
+  const Hostile cases[] = {
+      {"stride far beyond the slot", 320, 240, 0x40000000u},
+      {"stride overflowing 32 bits when multiplied", 320, 240, 0xFFFFFFFFu},
+      {"stride narrower than the width", 320, 240, 16},
+      {"width beyond the ring maximum", 8192, 240, 8192},
+      {"height beyond the ring maximum", 320, 4320, 320},
+      {"odd dimensions have no chroma plane", 321, 241, 321},
+      {"zero width", 0, 240, 320},
+      {"zero height", 320, 0, 320},
+  };
+
+  for (const Hostile& c : cases) {
+    rcwin::FrameInfo bad;
+    bad.width = c.width;
+    bad.height = c.height;
+    bad.stride = c.stride;
+    bad.format = rcwin::kFourccNv12;
+    check(SUCCEEDED(client.writeFrame(frame.data(), bytes, bad)),
+          std::string("writeFrame publishes raw metadata: ") + c.name);
+    checkEq(server.readLatest(scratch.data(), static_cast<uint32_t>(scratch.size()), got),
+            S_FALSE, std::string("readLatest rejects ") + c.name);
+  }
+
+  // And the ring is not wedged by having seen them: a good frame still reads back.
+  rcwin::FrameInfo good;
+  good.width = 320;
+  good.height = 240;
+  good.stride = 320;
+  good.format = rcwin::kFourccNv12;
+  good.ptsMicros = 999;
+  check(SUCCEEDED(client.writeFrame(frame.data(), bytes, good)), "good frame publishes");
+  checkEq(server.readLatest(scratch.data(), static_cast<uint32_t>(scratch.size()), got), S_OK,
+          "a valid frame still reads back after the rejections");
+  checkEq(static_cast<long long>(got.ptsMicros), 999, "and it is the right frame");
+
+  // A padded stride is legitimate and must survive: Media Foundation hands out padded
+  // buffers routinely, so the validator must reject the implausible without rejecting
+  // the merely unusual.
+  const rcwin::Nv12Layout padded = rcwin::nv12Layout(320, 240, 384);
+  std::vector<uint8_t> paddedFrame(padded.totalSize, 0x31);
+  rcwin::FrameInfo pad;
+  pad.width = 320;
+  pad.height = 240;
+  pad.stride = 384;
+  pad.format = rcwin::kFourccNv12;
+  check(SUCCEEDED(
+            client.writeFrame(paddedFrame.data(), static_cast<uint32_t>(paddedFrame.size()),
+                              pad)),
+        "padded frame publishes");
+  checkEq(server.readLatest(scratch.data(), static_cast<uint32_t>(scratch.size()), got), S_OK,
+          "a legitimately padded stride is accepted");
+  checkEq(got.stride, 384, "padded stride round-trips");
+}
+
 void testRingSeqlockUnderContention() {
   std::printf("Frame ring seqlock under contention\n");
 
@@ -361,6 +451,7 @@ int main() {
   testPatternDeterminism();
   testPatternRegionInvariants();
   testRingBasics();
+  testRingRejectsHostileGeometry();
   testRingSeqlockUnderContention();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
