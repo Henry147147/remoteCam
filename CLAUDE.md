@@ -141,9 +141,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 `windows/` is added only when `WIN32`, so this configure step works everywhere.
-CI builds `core/` on `ubuntu-latest`, `windows-latest` and `macos-latest`; the
-platform jobs in `.github/workflows/ci.yml` are stubbed behind `if: false` until
-their directories have content.
+CI builds `core/` on Ubuntu and macOS, the Windows targets/tests on Windows, and the
+iOS app plus protocol/storage tests on macOS. Camera capture and hardware encoding
+still require a physical-device pass.
 
 ## Current status
 
@@ -161,10 +161,22 @@ pass in `rcwin-common-tests`, including a threaded seqlock contention test. The
 end-to-end check needs an elevated `--register` and a hand pass over the consumer
 matrix; until that has been run, **do not describe M1 as working**.
 
-**Not started** — everything else.
+**iOS client written and building, not device-verified.** `ios/RemoteCam.xcodeproj`
+contains Bonjour/manual/recent connections, framed TCP and deterministic CBOR,
+AVCapture multi-lens/manual controls, low-latency H.264/HEVC VideoToolbox encode,
+reconnect, telemetry, background multitasking setup, preview power saving, and a
+Live Activity. The simulator suite has 9 passing tests and one hardware-encoder
+skip; Release compiles for the iPhoneOS SDK. A clean signed install is blocked by
+missing local provisioning and Developer Mode. Secure pairing, authenticated
+control/media encryption, and USB are blocked on the joint decisions listed in
+`docs/ios-backend-handoff.md`; Release rejects unauthenticated streaming.
 
-Next: finish M1's verification (see `windows/CLAUDE.md`), then **M0**'s walking
-skeleton and `rc-fakephone`.
+**Not started** — the Windows transport/decoder/pipeline/UI, effects, OBS plugin,
+installer, and the shared production pairing/security codec.
+
+Next: finish M1's verification (see `windows/CLAUDE.md`), then build the Windows M0
+listener/Bonjour/decoder and the `rc-fakepc` harness described in the iOS/backend
+handoff. In parallel, settle the normative pairing/authentication details.
 
 ## Two corrections already applied — PLAN.md's original text was wrong
 

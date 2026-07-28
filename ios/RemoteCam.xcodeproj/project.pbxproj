@@ -7,67 +7,72 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		01A8088796F140BC35C3640B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 65859C089D117D70EE0982F8 /* Foundation.framework */; };
-		11B5A5D6EEC3D3967484B688 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 65859C089D117D70EE0982F8 /* Foundation.framework */; };
-		153D89E171AC2C2D23055FAB /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA45D296FC21356F806F898E /* RootView.swift */; };
-		1BC60FC23821CCF3AA2E1A43 /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61CC9E6E4D6A18583FC49D66 /* CameraPreview.swift */; };
-		21E20885F29585123D920641 /* ManualConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5978415581CD8E6CA04249E0 /* ManualConnectionView.swift */; };
-		22339C4B6D7316E84CA1781D /* RemoteHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AED9AD4C764091BB5946A21 /* RemoteHost.swift */; };
-		24B1AD7601F3437127569CF3 /* RemoteCamActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = B9FF63C8E988B88B0C30E239 /* RemoteCamActivity.appex */; };
-		25ABE9026E8D93B94B713D75 /* WireFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C9AC1D4094EEC7B3C63E202 /* WireFrame.swift */; };
-		25DE5285E00709901B4F639E /* RecentHostsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADA0BF7F2DDE44756700176 /* RecentHostsStoreTests.swift */; };
-		2619D44F60DC15150D5412D8 /* RemoteCamSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0BE8F3F3FABCC3632757AA1 /* RemoteCamSession.swift */; };
-		2ABD5487B8730A3CAD4776D0 /* RemoteCamActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C58A9AEFCFC4F7A0BABFC5 /* RemoteCamActivityWidget.swift */; };
-		351C18AC8A6A2772C1777EBA /* RecentHostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B133CCCCEF354215BEE4C30C /* RecentHostsStore.swift */; };
-		39EBCBBDA75D00530B56CFC2 /* ControlMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479F90915E1AE3AFF816273E /* ControlMessageTests.swift */; };
-		42DA79C329789BEB9EF81D03 /* RemoteHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2941D6588775EDEF8FCEBCAD /* RemoteHost.swift */; };
-		5B5FD33B73D7E9867C96AAB6 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 65859C089D117D70EE0982F8 /* Foundation.framework */; };
-		5BF069AA626F4D2527D8E884 /* RecentHostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EADF14806D7F7531D1F9F570 /* RecentHostsStore.swift */; };
-		5D84FDD2A96D70114C8ACCCB /* WireFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A434458E2CAF751D44FD2F2 /* WireFrameTests.swift */; };
-		60FC1542B39DB26448825938 /* CBOR.swift in Sources */ = {isa = PBXBuildFile; fileRef = B77C22E52EDB9769E7FD0C38 /* CBOR.swift */; };
-		6919C4E65C20F1E2EE8FB948 /* WireFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 405DDB5BA82A7D2CB60FE8BF /* WireFrame.swift */; };
-		77EF1BDCC33BF6791A7F3AA3 /* StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1315C992E75245DA65AC0BB /* StreamView.swift */; };
-		79FFB0ADD1EA58B4E1BD4F84 /* CameraControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B90D74905BB059DF0023F6 /* CameraControlsView.swift */; };
-		7CBE3B4DB1D284C86682C22C /* RemoteCamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 812B276758B1989A560956E5 /* RemoteCamApp.swift */; };
-		886897885EDA386150B05E3E /* RemoteCamActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFAA99F2CD2331D25774571 /* RemoteCamActivityAttributes.swift */; };
-		92B131367C33411566AEB29C /* CaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDF055BF26B47FC2334A6C10 /* CaptureEngine.swift */; };
-		97FCEB342C39D54CC8C9A98B /* CameraModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0979278F0054368DA816D38 /* CameraModels.swift */; };
-		9BC3B1AAD7152254C32C6650 /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC20D759BF98E1D331C829F5 /* BonjourBrowser.swift */; };
-		9E55DAEA15996CE004E31997 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6A488E3D80FD4D30352210 /* DeviceIdentity.swift */; };
-		A48DBB20D9E064D31FA45AD6 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96768A486A4595E4F66BCEA5 /* LiveActivityController.swift */; };
-		A5DBA091E2BEC4CA28404B03 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB28F3A7BC8371F680E7C833 /* AppModel.swift */; };
-		B53399CF710E99A2002AC16D /* CameraModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E1543865B8B9E11DCA16A7 /* CameraModels.swift */; };
-		BA4A00212944A52EC9AC5479 /* CBORTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72AAA90E4567C798B053CF56 /* CBORTests.swift */; };
-		C0874999D930F2EBDBCA0E98 /* StreamConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1EA8F6062A76876C0EA31ED /* StreamConfiguration.swift */; };
-		C1E7A29A41F2CD843EAE5CE3 /* CBOR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DB00F8CC8B16D793C09EB92 /* CBOR.swift */; };
-		C3A7BA56C25F7F043A53678F /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258F829CCBFD0E4A56C938E4 /* ControlMessage.swift */; };
-		C4193F206520C2B4A6BF7727 /* RemoteCamActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FCA133EAED01AC15140559 /* RemoteCamActivityAttributes.swift */; };
-		D410A4AD5A8668B88F296F39 /* DeviceTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB09E47E62298C1D034ADB50 /* DeviceTelemetry.swift */; };
-		DE881566CC5F6810A716649A /* StreamConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78F4A337B1A53968CA2E6FB7 /* StreamConfiguration.swift */; };
-		E63C81D5EA1409B0B36F51D2 /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 811610DB068DBB6A68A8B803 /* ControlMessage.swift */; };
-		E7E89418F92324F1CF3A1D4E /* VideoEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88B7DE25856BA5528C27922F /* VideoEncoder.swift */; };
-		FAE6B6510A515CB3E7F9A947 /* CameraController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40F4D49F265AEAB35BF2797 /* CameraController.swift */; };
-		FD8B49186DF7968B5A701071 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EAFF0B2AF97E794CC17D249 /* DeviceIdentity.swift */; };
+		069FC4038F38965D80F8128E /* CaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C487D5EF1AE8280AA575BAAE /* CaptureEngine.swift */; };
+		0A85BF140D2E9139145D97A5 /* CameraModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F38AF11FD7B37F6B1D08EBB /* CameraModels.swift */; };
+		0EAFAD23A1094EC4ED7DAE37 /* StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A3AB95DAFFDF86534E57A43 /* StreamView.swift */; };
+		15882E97E98FF53EA3B15844 /* WireFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9A2EDD9117914637860500 /* WireFrame.swift */; };
+		203DD2E3563835F08B4778D9 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1E77E97DEA39ECD2EB0F37 /* AppModel.swift */; };
+		29AF851B4E82509745CC7D5F /* CBOR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09454C194589A8910A30964D /* CBOR.swift */; };
+		2CAC01C979D1475E3E547A09 /* VideoEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC3CAC50E2992BB9BBE0FA4 /* VideoEncoder.swift */; };
+		310B06011804E51B87C21CE9 /* CameraModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7470D9C0BAE4698B0558567 /* CameraModels.swift */; };
+		37050326229172CC54142E76 /* RemoteCamActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E49058441D88AB23C7666F5A /* RemoteCamActivityAttributes.swift */; };
+		3856BED8C769EB426709270A /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 763520A9D8FE13CCE58512F7 /* ControlMessage.swift */; };
+		4359908447076906FC00BA98 /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63EA1CC6EEE1B27238B25A24 /* BonjourBrowser.swift */; };
+		43C7F832466D0DC935615007 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C10F21C6AF5160689872F91 /* RootView.swift */; };
+		454E660AEFF6DA9C002DDE97 /* RecentHostsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79E425BC986C1B15D06DB46 /* RecentHostsStoreTests.swift */; };
+		49D539D3267B64B95AC10F9D /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5FE31513008BC0DA44C55A9 /* DeviceIdentity.swift */; };
+		578C5DEBD443D57ABEFB2161 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF4947A8CD76BCDE90DCB5E /* LiveActivityController.swift */; };
+		57C02783042C85B6920E25E3 /* StreamConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A76155CCA01E252D9A1EC49 /* StreamConfiguration.swift */; };
+		598E85F6861926224B57195E /* CameraController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408EA7CA92A35B2023912A99 /* CameraController.swift */; };
+		5AFAE14EDE212D4C43A2D69B /* RemoteCamActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA479A99FD430DD4A9A47F67 /* RemoteCamActivityAttributes.swift */; };
+		622B4E3590917ACCCE052241 /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E1EB45611E6BDC8A4ED775 /* ControlMessage.swift */; };
+		629F5D6A5933B346543E7E2C /* RemoteCamActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F4B9EB5DE5575951FFD648 /* RemoteCamActivityWidget.swift */; };
+		62F9F7D024326CB6488E6E9E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6A1E183FAA759B570F17E91C /* PrivacyInfo.xcprivacy */; };
+		6850C9F80B7CB54FD8F08763 /* RemoteCamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D38C2A53FE57F12F85823947 /* RemoteCamApp.swift */; };
+		70E1BCC74C80E6203DF9395C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE5A606210703AC7B28024D3 /* Foundation.framework */; };
+		743FA355719F5762179680C7 /* CameraControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32019EBFA82C6F773E95F93F /* CameraControlsView.swift */; };
+		757AAC3EA1E69B859EA1681B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE5A606210703AC7B28024D3 /* Foundation.framework */; };
+		7E279BE6745F7251D62570C6 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE5A606210703AC7B28024D3 /* Foundation.framework */; };
+		7F289683BB7FAF08E9F984D6 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 282F9A1650390361BEFBCB63 /* DeviceIdentity.swift */; };
+		80B8D979EBFE6B43EBDDFAAF /* WireFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4758FF52CD1F773ED9EAC9BF /* WireFrame.swift */; };
+		9A7D18DBDCA0017C81696523 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 147533AF1431E827F47E985B /* DiagnosticsView.swift */; };
+		A5AD8DB695D2CB413B343B0B /* RemoteCamSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ECB7F916373206876EE4BCC /* RemoteCamSession.swift */; };
+		AAB189EC777E5557B7B0D9F1 /* VideoEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EFBCA8EFFBC825D2FF2D31A /* VideoEncoderTests.swift */; };
+		AED70B226066CD5476FADBF7 /* CBORTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD12DB6C1EFFD92D3F7167AC /* CBORTests.swift */; };
+		C2641768E291CA4FC38FA35A /* CBOR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2940A7681C0C58E155ED76F9 /* CBOR.swift */; };
+		C3F4CA1B04A0022937A55991 /* WireFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FDF0654E5C442EAAC2F6560 /* WireFrameTests.swift */; };
+		C5784C12159469788D4CD79C /* RemoteCamActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5F1B2C22F134EA8B88845432 /* RemoteCamActivity.appex */; };
+		CB22FCEB1183B1F4F42DDD2A /* RecentHostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A398A1DAC0A6FE6D736D964 /* RecentHostsStore.swift */; };
+		CC443B7F16D5B44DB8FFB377 /* ManualConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31B23A6DC444092258B09C7 /* ManualConnectionView.swift */; };
+		D3D06FE53D82BC5F8B19BA81 /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4394FE7B9FB089AB0D253A4F /* CameraPreview.swift */; };
+		DD5EE9B63C672AF9388CEF75 /* RecentHostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E03392B25344AEC6F9D22843 /* RecentHostsStore.swift */; };
+		E0227209218A185C6505EF34 /* RemoteHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 962A5D724652EF432C819284 /* RemoteHost.swift */; };
+		F6C1F37BBF2EA71C2D6933F2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CE0EBB341F858DC7E693740C /* Assets.xcassets */; };
+		F8505AC32585FD3328692C37 /* DeviceTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DBDAF963F0159BFEBB19CD4 /* DeviceTelemetry.swift */; };
+		F9307DEAEBF279366F1A1752 /* RemoteHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4936C7327E135764EA56C6 /* RemoteHost.swift */; };
+		FCDB01D1633B8C170424B9E6 /* StreamConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B9BED2B392693132BC683A /* StreamConfiguration.swift */; };
+		FD9047196D967BFDBD0236CC /* VideoEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06977042B99BEB5ED2C1D584 /* VideoEncoder.swift */; };
+		FF4A866D512C4938D818BD65 /* ControlMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCD696B404AA60488592FBC6 /* ControlMessageTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		B889F4FD8348A78BE7358411 /* PBXContainerItemProxy */ = {
+		949DF2E7043E623C05722BBE /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = E3BCA103BE1E765659B1C753 /* Project object */;
+			containerPortal = 5A9FD2046E7EFB3840BB14F0 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = D322BB2EB07E171AD3DEF0B7;
+			remoteGlobalIDString = 3C43CC16BC11FD4836DE59C7;
 			remoteInfo = RemoteCamActivity;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		8EB5AC0956F33FF305EE7D07 /* Embed App Extensions */ = {
+		0EB47D5EB2DA2C8C80A08498 /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				24B1AD7601F3437127569CF3 /* RemoteCamActivity.appex in Embed App Extensions */,
+				C5784C12159469788D4CD79C /* RemoteCamActivity.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -75,182 +80,192 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		24C58A9AEFCFC4F7A0BABFC5 /* RemoteCamActivityWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamActivityWidget.swift; path = RemoteCamActivity/RemoteCamActivityWidget.swift; sourceTree = "<group>"; };
-		258F829CCBFD0E4A56C938E4 /* ControlMessage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControlMessage.swift; path = RemoteCam/Sources/Wire/ControlMessage.swift; sourceTree = "<group>"; };
-		2941D6588775EDEF8FCEBCAD /* RemoteHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteHost.swift; path = RemoteCam/Sources/Models/RemoteHost.swift; sourceTree = "<group>"; };
-		3A434458E2CAF751D44FD2F2 /* WireFrameTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrameTests.swift; path = RemoteCamTests/WireFrameTests.swift; sourceTree = "<group>"; };
-		3FFAA99F2CD2331D25774571 /* RemoteCamActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamActivityAttributes.swift; path = RemoteCam/Sources/Activity/RemoteCamActivityAttributes.swift; sourceTree = "<group>"; };
-		405DDB5BA82A7D2CB60FE8BF /* WireFrame.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrame.swift; path = RemoteCam/Sources/Wire/WireFrame.swift; sourceTree = "<group>"; };
-		41E1543865B8B9E11DCA16A7 /* CameraModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraModels.swift; path = RemoteCam/Sources/Models/CameraModels.swift; sourceTree = "<group>"; };
-		479F90915E1AE3AFF816273E /* ControlMessageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControlMessageTests.swift; path = RemoteCamTests/ControlMessageTests.swift; sourceTree = "<group>"; };
-		4EAFF0B2AF97E794CC17D249 /* DeviceIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceIdentity.swift; path = RemoteCam/Sources/Storage/DeviceIdentity.swift; sourceTree = "<group>"; };
-		5978415581CD8E6CA04249E0 /* ManualConnectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ManualConnectionView.swift; path = RemoteCam/Sources/UI/ManualConnectionView.swift; sourceTree = "<group>"; };
-		61CC9E6E4D6A18583FC49D66 /* CameraPreview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraPreview.swift; path = RemoteCam/Sources/UI/CameraPreview.swift; sourceTree = "<group>"; };
-		65859C089D117D70EE0982F8 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		6C9AC1D4094EEC7B3C63E202 /* WireFrame.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrame.swift; path = RemoteCam/Sources/Wire/WireFrame.swift; sourceTree = "<group>"; };
-		72AAA90E4567C798B053CF56 /* CBORTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBORTests.swift; path = RemoteCamTests/CBORTests.swift; sourceTree = "<group>"; };
-		78F4A337B1A53968CA2E6FB7 /* StreamConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamConfiguration.swift; path = RemoteCam/Sources/Models/StreamConfiguration.swift; sourceTree = "<group>"; };
-		7DB00F8CC8B16D793C09EB92 /* CBOR.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBOR.swift; path = RemoteCam/Sources/Wire/CBOR.swift; sourceTree = "<group>"; };
-		811610DB068DBB6A68A8B803 /* ControlMessage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControlMessage.swift; path = RemoteCam/Sources/Wire/ControlMessage.swift; sourceTree = "<group>"; };
-		812B276758B1989A560956E5 /* RemoteCamApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamApp.swift; path = RemoteCam/Sources/App/RemoteCamApp.swift; sourceTree = "<group>"; };
-		813243325D4F26717EE68C91 /* RemoteCam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RemoteCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		88B7DE25856BA5528C27922F /* VideoEncoder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoEncoder.swift; path = RemoteCam/Sources/Capture/VideoEncoder.swift; sourceTree = "<group>"; };
-		96768A486A4595E4F66BCEA5 /* LiveActivityController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LiveActivityController.swift; path = RemoteCam/Sources/Activity/LiveActivityController.swift; sourceTree = "<group>"; };
-		9AED9AD4C764091BB5946A21 /* RemoteHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteHost.swift; path = RemoteCam/Sources/Models/RemoteHost.swift; sourceTree = "<group>"; };
-		B0979278F0054368DA816D38 /* CameraModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraModels.swift; path = RemoteCam/Sources/Models/CameraModels.swift; sourceTree = "<group>"; };
-		B0BE8F3F3FABCC3632757AA1 /* RemoteCamSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamSession.swift; path = RemoteCam/Sources/Network/RemoteCamSession.swift; sourceTree = "<group>"; };
-		B133CCCCEF354215BEE4C30C /* RecentHostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStore.swift; path = RemoteCam/Sources/Storage/RecentHostsStore.swift; sourceTree = "<group>"; };
-		B77C22E52EDB9769E7FD0C38 /* CBOR.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBOR.swift; path = RemoteCam/Sources/Wire/CBOR.swift; sourceTree = "<group>"; };
-		B9FF63C8E988B88B0C30E239 /* RemoteCamActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RemoteCamActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		BB28F3A7BC8371F680E7C833 /* AppModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppModel.swift; path = RemoteCam/Sources/App/AppModel.swift; sourceTree = "<group>"; };
-		CDF055BF26B47FC2334A6C10 /* CaptureEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CaptureEngine.swift; path = RemoteCam/Sources/Capture/CaptureEngine.swift; sourceTree = "<group>"; };
-		CF6A488E3D80FD4D30352210 /* DeviceIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceIdentity.swift; path = RemoteCam/Sources/Storage/DeviceIdentity.swift; sourceTree = "<group>"; };
-		D1315C992E75245DA65AC0BB /* StreamView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamView.swift; path = RemoteCam/Sources/UI/StreamView.swift; sourceTree = "<group>"; };
-		D1EA8F6062A76876C0EA31ED /* StreamConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamConfiguration.swift; path = RemoteCam/Sources/Models/StreamConfiguration.swift; sourceTree = "<group>"; };
-		D6FCA133EAED01AC15140559 /* RemoteCamActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamActivityAttributes.swift; path = RemoteCam/Sources/Activity/RemoteCamActivityAttributes.swift; sourceTree = "<group>"; };
-		D97091AFF3D5FD4B163E6874 /* RemoteCamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemoteCamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		E40F4D49F265AEAB35BF2797 /* CameraController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraController.swift; path = RemoteCam/Sources/Capture/CameraController.swift; sourceTree = "<group>"; };
-		E5B90D74905BB059DF0023F6 /* CameraControlsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraControlsView.swift; path = RemoteCam/Sources/UI/CameraControlsView.swift; sourceTree = "<group>"; };
-		EA45D296FC21356F806F898E /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = RemoteCam/Sources/UI/RootView.swift; sourceTree = "<group>"; };
-		EADF14806D7F7531D1F9F570 /* RecentHostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStore.swift; path = RemoteCam/Sources/Storage/RecentHostsStore.swift; sourceTree = "<group>"; };
-		EB09E47E62298C1D034ADB50 /* DeviceTelemetry.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceTelemetry.swift; path = RemoteCam/Sources/Telemetry/DeviceTelemetry.swift; sourceTree = "<group>"; };
-		EC20D759BF98E1D331C829F5 /* BonjourBrowser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BonjourBrowser.swift; path = RemoteCam/Sources/Discovery/BonjourBrowser.swift; sourceTree = "<group>"; };
-		FADA0BF7F2DDE44756700176 /* RecentHostsStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStoreTests.swift; path = RemoteCamTests/RecentHostsStoreTests.swift; sourceTree = "<group>"; };
+		06977042B99BEB5ED2C1D584 /* VideoEncoder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoEncoder.swift; path = RemoteCam/Sources/Capture/VideoEncoder.swift; sourceTree = "<group>"; };
+		07F4B9EB5DE5575951FFD648 /* RemoteCamActivityWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamActivityWidget.swift; path = RemoteCamActivity/RemoteCamActivityWidget.swift; sourceTree = "<group>"; };
+		09454C194589A8910A30964D /* CBOR.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBOR.swift; path = RemoteCam/Sources/Wire/CBOR.swift; sourceTree = "<group>"; };
+		0A3AB95DAFFDF86534E57A43 /* StreamView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamView.swift; path = RemoteCam/Sources/UI/StreamView.swift; sourceTree = "<group>"; };
+		147533AF1431E827F47E985B /* DiagnosticsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DiagnosticsView.swift; path = RemoteCam/Sources/UI/DiagnosticsView.swift; sourceTree = "<group>"; };
+		1C10F21C6AF5160689872F91 /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = RemoteCam/Sources/UI/RootView.swift; sourceTree = "<group>"; };
+		282F9A1650390361BEFBCB63 /* DeviceIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceIdentity.swift; path = RemoteCam/Sources/Storage/DeviceIdentity.swift; sourceTree = "<group>"; };
+		2940A7681C0C58E155ED76F9 /* CBOR.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBOR.swift; path = RemoteCam/Sources/Wire/CBOR.swift; sourceTree = "<group>"; };
+		2A398A1DAC0A6FE6D736D964 /* RecentHostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStore.swift; path = RemoteCam/Sources/Storage/RecentHostsStore.swift; sourceTree = "<group>"; };
+		32019EBFA82C6F773E95F93F /* CameraControlsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraControlsView.swift; path = RemoteCam/Sources/UI/CameraControlsView.swift; sourceTree = "<group>"; };
+		408EA7CA92A35B2023912A99 /* CameraController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraController.swift; path = RemoteCam/Sources/Capture/CameraController.swift; sourceTree = "<group>"; };
+		4394FE7B9FB089AB0D253A4F /* CameraPreview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraPreview.swift; path = RemoteCam/Sources/UI/CameraPreview.swift; sourceTree = "<group>"; };
+		4758FF52CD1F773ED9EAC9BF /* WireFrame.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrame.swift; path = RemoteCam/Sources/Wire/WireFrame.swift; sourceTree = "<group>"; };
+		51B9BED2B392693132BC683A /* StreamConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamConfiguration.swift; path = RemoteCam/Sources/Models/StreamConfiguration.swift; sourceTree = "<group>"; };
+		5B4936C7327E135764EA56C6 /* RemoteHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteHost.swift; path = RemoteCam/Sources/Models/RemoteHost.swift; sourceTree = "<group>"; };
+		5EFBCA8EFFBC825D2FF2D31A /* VideoEncoderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoEncoderTests.swift; path = RemoteCamTests/VideoEncoderTests.swift; sourceTree = "<group>"; };
+		5F1B2C22F134EA8B88845432 /* RemoteCamActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RemoteCamActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5FDF0654E5C442EAAC2F6560 /* WireFrameTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrameTests.swift; path = RemoteCamTests/WireFrameTests.swift; sourceTree = "<group>"; };
+		63EA1CC6EEE1B27238B25A24 /* BonjourBrowser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BonjourBrowser.swift; path = RemoteCam/Sources/Discovery/BonjourBrowser.swift; sourceTree = "<group>"; };
+		6A1E183FAA759B570F17E91C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = RemoteCam/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6A7A2D456ED0DAD46A34DF8B /* RemoteCam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RemoteCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6DBDAF963F0159BFEBB19CD4 /* DeviceTelemetry.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceTelemetry.swift; path = RemoteCam/Sources/Telemetry/DeviceTelemetry.swift; sourceTree = "<group>"; };
+		6ECB7F916373206876EE4BCC /* RemoteCamSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamSession.swift; path = RemoteCam/Sources/Network/RemoteCamSession.swift; sourceTree = "<group>"; };
+		75E1EB45611E6BDC8A4ED775 /* ControlMessage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControlMessage.swift; path = RemoteCam/Sources/Wire/ControlMessage.swift; sourceTree = "<group>"; };
+		763520A9D8FE13CCE58512F7 /* ControlMessage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControlMessage.swift; path = RemoteCam/Sources/Wire/ControlMessage.swift; sourceTree = "<group>"; };
+		7BC3CAC50E2992BB9BBE0FA4 /* VideoEncoder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoEncoder.swift; path = RemoteCam/Sources/Capture/VideoEncoder.swift; sourceTree = "<group>"; };
+		7C1E77E97DEA39ECD2EB0F37 /* AppModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppModel.swift; path = RemoteCam/Sources/App/AppModel.swift; sourceTree = "<group>"; };
+		7F38AF11FD7B37F6B1D08EBB /* CameraModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraModels.swift; path = RemoteCam/Sources/Models/CameraModels.swift; sourceTree = "<group>"; };
+		7FF4947A8CD76BCDE90DCB5E /* LiveActivityController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LiveActivityController.swift; path = RemoteCam/Sources/Activity/LiveActivityController.swift; sourceTree = "<group>"; };
+		8A76155CCA01E252D9A1EC49 /* StreamConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamConfiguration.swift; path = RemoteCam/Sources/Models/StreamConfiguration.swift; sourceTree = "<group>"; };
+		962A5D724652EF432C819284 /* RemoteHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteHost.swift; path = RemoteCam/Sources/Models/RemoteHost.swift; sourceTree = "<group>"; };
+		A79E425BC986C1B15D06DB46 /* RecentHostsStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStoreTests.swift; path = RemoteCamTests/RecentHostsStoreTests.swift; sourceTree = "<group>"; };
+		AD12DB6C1EFFD92D3F7167AC /* CBORTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBORTests.swift; path = RemoteCamTests/CBORTests.swift; sourceTree = "<group>"; };
+		AE5A606210703AC7B28024D3 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		B31B23A6DC444092258B09C7 /* ManualConnectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ManualConnectionView.swift; path = RemoteCam/Sources/UI/ManualConnectionView.swift; sourceTree = "<group>"; };
+		B7470D9C0BAE4698B0558567 /* CameraModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraModels.swift; path = RemoteCam/Sources/Models/CameraModels.swift; sourceTree = "<group>"; };
+		BA479A99FD430DD4A9A47F67 /* RemoteCamActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamActivityAttributes.swift; path = RemoteCam/Sources/Activity/RemoteCamActivityAttributes.swift; sourceTree = "<group>"; };
+		C487D5EF1AE8280AA575BAAE /* CaptureEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CaptureEngine.swift; path = RemoteCam/Sources/Capture/CaptureEngine.swift; sourceTree = "<group>"; };
+		CCD696B404AA60488592FBC6 /* ControlMessageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControlMessageTests.swift; path = RemoteCamTests/ControlMessageTests.swift; sourceTree = "<group>"; };
+		CE0EBB341F858DC7E693740C /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = RemoteCam/Resources/Assets.xcassets; sourceTree = "<group>"; };
+		D38C2A53FE57F12F85823947 /* RemoteCamApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamApp.swift; path = RemoteCam/Sources/App/RemoteCamApp.swift; sourceTree = "<group>"; };
+		D5FE31513008BC0DA44C55A9 /* DeviceIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceIdentity.swift; path = RemoteCam/Sources/Storage/DeviceIdentity.swift; sourceTree = "<group>"; };
+		E03392B25344AEC6F9D22843 /* RecentHostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStore.swift; path = RemoteCam/Sources/Storage/RecentHostsStore.swift; sourceTree = "<group>"; };
+		E49058441D88AB23C7666F5A /* RemoteCamActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamActivityAttributes.swift; path = RemoteCam/Sources/Activity/RemoteCamActivityAttributes.swift; sourceTree = "<group>"; };
+		FC884AD0E93CE16B7423C35B /* RemoteCamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemoteCamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FF9A2EDD9117914637860500 /* WireFrame.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrame.swift; path = RemoteCam/Sources/Wire/WireFrame.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		073C258E8C91C3D08BD2B51C /* Frameworks */ = {
+		0E0AF7D9C46ECF2A1F6632FB /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5B5FD33B73D7E9867C96AAB6 /* Foundation.framework in Frameworks */,
+				757AAC3EA1E69B859EA1681B /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		69D28B51BDFF5D07F57D4D52 /* Frameworks */ = {
+		427CC552B17BF8CB74AE206E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				01A8088796F140BC35C3640B /* Foundation.framework in Frameworks */,
+				70E1BCC74C80E6203DF9395C /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		9BA10516879FE924B08C6E77 /* Frameworks */ = {
+		AF080215E31642F0CE4CD7A6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				11B5A5D6EEC3D3967484B688 /* Foundation.framework in Frameworks */,
+				7E279BE6745F7251D62570C6 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0F743EEB7F54744775139C3A /* iOS */ = {
+		10E29B007EC94D25D2E98A42 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				65859C089D117D70EE0982F8 /* Foundation.framework */,
-			);
-			name = iOS;
-			sourceTree = "<group>";
-		};
-		2F0C61A6FFF34069878C45C8 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				813243325D4F26717EE68C91 /* RemoteCam.app */,
-				D97091AFF3D5FD4B163E6874 /* RemoteCamTests.xctest */,
-				B9FF63C8E988B88B0C30E239 /* RemoteCamActivity.appex */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		38F6B47B2203B4D86A9333C8 /* RemoteCamActivity */ = {
-			isa = PBXGroup;
-			children = (
-				24C58A9AEFCFC4F7A0BABFC5 /* RemoteCamActivityWidget.swift */,
-				D6FCA133EAED01AC15140559 /* RemoteCamActivityAttributes.swift */,
-			);
-			name = RemoteCamActivity;
-			sourceTree = "<group>";
-		};
-		3A090DBD634FA457CC388F45 /* RemoteCam */ = {
-			isa = PBXGroup;
-			children = (
-				96768A486A4595E4F66BCEA5 /* LiveActivityController.swift */,
-				3FFAA99F2CD2331D25774571 /* RemoteCamActivityAttributes.swift */,
-				BB28F3A7BC8371F680E7C833 /* AppModel.swift */,
-				812B276758B1989A560956E5 /* RemoteCamApp.swift */,
-				E40F4D49F265AEAB35BF2797 /* CameraController.swift */,
-				CDF055BF26B47FC2334A6C10 /* CaptureEngine.swift */,
-				88B7DE25856BA5528C27922F /* VideoEncoder.swift */,
-				EC20D759BF98E1D331C829F5 /* BonjourBrowser.swift */,
-				41E1543865B8B9E11DCA16A7 /* CameraModels.swift */,
-				2941D6588775EDEF8FCEBCAD /* RemoteHost.swift */,
-				D1EA8F6062A76876C0EA31ED /* StreamConfiguration.swift */,
-				B0BE8F3F3FABCC3632757AA1 /* RemoteCamSession.swift */,
-				CF6A488E3D80FD4D30352210 /* DeviceIdentity.swift */,
-				B133CCCCEF354215BEE4C30C /* RecentHostsStore.swift */,
-				EB09E47E62298C1D034ADB50 /* DeviceTelemetry.swift */,
-				E5B90D74905BB059DF0023F6 /* CameraControlsView.swift */,
-				61CC9E6E4D6A18583FC49D66 /* CameraPreview.swift */,
-				5978415581CD8E6CA04249E0 /* ManualConnectionView.swift */,
-				EA45D296FC21356F806F898E /* RootView.swift */,
-				D1315C992E75245DA65AC0BB /* StreamView.swift */,
-				7DB00F8CC8B16D793C09EB92 /* CBOR.swift */,
-				811610DB068DBB6A68A8B803 /* ControlMessage.swift */,
-				6C9AC1D4094EEC7B3C63E202 /* WireFrame.swift */,
-			);
-			name = RemoteCam;
-			sourceTree = "<group>";
-		};
-		3E5C0B195FA88FD9BE181BE5 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				0F743EEB7F54744775139C3A /* iOS */,
+				6F20143F9662ACFD2E6F528D /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		E20B692D8002ABE6404F98B0 /* RemoteCamTests */ = {
+		40734E8ADDF5D69CA97A87B7 /* RemoteCamActivity */ = {
 			isa = PBXGroup;
 			children = (
-				72AAA90E4567C798B053CF56 /* CBORTests.swift */,
-				479F90915E1AE3AFF816273E /* ControlMessageTests.swift */,
-				FADA0BF7F2DDE44756700176 /* RecentHostsStoreTests.swift */,
-				3A434458E2CAF751D44FD2F2 /* WireFrameTests.swift */,
-				B0979278F0054368DA816D38 /* CameraModels.swift */,
-				9AED9AD4C764091BB5946A21 /* RemoteHost.swift */,
-				78F4A337B1A53968CA2E6FB7 /* StreamConfiguration.swift */,
-				4EAFF0B2AF97E794CC17D249 /* DeviceIdentity.swift */,
-				EADF14806D7F7531D1F9F570 /* RecentHostsStore.swift */,
-				B77C22E52EDB9769E7FD0C38 /* CBOR.swift */,
-				258F829CCBFD0E4A56C938E4 /* ControlMessage.swift */,
-				405DDB5BA82A7D2CB60FE8BF /* WireFrame.swift */,
+				07F4B9EB5DE5575951FFD648 /* RemoteCamActivityWidget.swift */,
+				BA479A99FD430DD4A9A47F67 /* RemoteCamActivityAttributes.swift */,
+			);
+			name = RemoteCamActivity;
+			sourceTree = "<group>";
+		};
+		4433AE21D788C9A4D68D7FB8 /* RemoteCam */ = {
+			isa = PBXGroup;
+			children = (
+				7FF4947A8CD76BCDE90DCB5E /* LiveActivityController.swift */,
+				E49058441D88AB23C7666F5A /* RemoteCamActivityAttributes.swift */,
+				7C1E77E97DEA39ECD2EB0F37 /* AppModel.swift */,
+				D38C2A53FE57F12F85823947 /* RemoteCamApp.swift */,
+				408EA7CA92A35B2023912A99 /* CameraController.swift */,
+				C487D5EF1AE8280AA575BAAE /* CaptureEngine.swift */,
+				7BC3CAC50E2992BB9BBE0FA4 /* VideoEncoder.swift */,
+				63EA1CC6EEE1B27238B25A24 /* BonjourBrowser.swift */,
+				B7470D9C0BAE4698B0558567 /* CameraModels.swift */,
+				5B4936C7327E135764EA56C6 /* RemoteHost.swift */,
+				51B9BED2B392693132BC683A /* StreamConfiguration.swift */,
+				6ECB7F916373206876EE4BCC /* RemoteCamSession.swift */,
+				D5FE31513008BC0DA44C55A9 /* DeviceIdentity.swift */,
+				E03392B25344AEC6F9D22843 /* RecentHostsStore.swift */,
+				6DBDAF963F0159BFEBB19CD4 /* DeviceTelemetry.swift */,
+				32019EBFA82C6F773E95F93F /* CameraControlsView.swift */,
+				4394FE7B9FB089AB0D253A4F /* CameraPreview.swift */,
+				147533AF1431E827F47E985B /* DiagnosticsView.swift */,
+				B31B23A6DC444092258B09C7 /* ManualConnectionView.swift */,
+				1C10F21C6AF5160689872F91 /* RootView.swift */,
+				0A3AB95DAFFDF86534E57A43 /* StreamView.swift */,
+				2940A7681C0C58E155ED76F9 /* CBOR.swift */,
+				75E1EB45611E6BDC8A4ED775 /* ControlMessage.swift */,
+				FF9A2EDD9117914637860500 /* WireFrame.swift */,
+				CE0EBB341F858DC7E693740C /* Assets.xcassets */,
+				6A1E183FAA759B570F17E91C /* PrivacyInfo.xcprivacy */,
+			);
+			name = RemoteCam;
+			sourceTree = "<group>";
+		};
+		4DADF90C0CDD052C1DF15152 /* RemoteCamTests */ = {
+			isa = PBXGroup;
+			children = (
+				AD12DB6C1EFFD92D3F7167AC /* CBORTests.swift */,
+				CCD696B404AA60488592FBC6 /* ControlMessageTests.swift */,
+				A79E425BC986C1B15D06DB46 /* RecentHostsStoreTests.swift */,
+				5EFBCA8EFFBC825D2FF2D31A /* VideoEncoderTests.swift */,
+				5FDF0654E5C442EAAC2F6560 /* WireFrameTests.swift */,
+				06977042B99BEB5ED2C1D584 /* VideoEncoder.swift */,
+				7F38AF11FD7B37F6B1D08EBB /* CameraModels.swift */,
+				962A5D724652EF432C819284 /* RemoteHost.swift */,
+				8A76155CCA01E252D9A1EC49 /* StreamConfiguration.swift */,
+				282F9A1650390361BEFBCB63 /* DeviceIdentity.swift */,
+				2A398A1DAC0A6FE6D736D964 /* RecentHostsStore.swift */,
+				09454C194589A8910A30964D /* CBOR.swift */,
+				763520A9D8FE13CCE58512F7 /* ControlMessage.swift */,
+				4758FF52CD1F773ED9EAC9BF /* WireFrame.swift */,
 			);
 			name = RemoteCamTests;
 			sourceTree = "<group>";
 		};
-		FC70B449B0BCF192E2491C7E = {
+		6F20143F9662ACFD2E6F528D /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				2F0C61A6FFF34069878C45C8 /* Products */,
-				3E5C0B195FA88FD9BE181BE5 /* Frameworks */,
-				3A090DBD634FA457CC388F45 /* RemoteCam */,
-				E20B692D8002ABE6404F98B0 /* RemoteCamTests */,
-				38F6B47B2203B4D86A9333C8 /* RemoteCamActivity */,
+				AE5A606210703AC7B28024D3 /* Foundation.framework */,
 			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		D3CB512496A4A8F54D3C2CDA = {
+			isa = PBXGroup;
+			children = (
+				FA56820F47F6D4880040E1FB /* Products */,
+				10E29B007EC94D25D2E98A42 /* Frameworks */,
+				4433AE21D788C9A4D68D7FB8 /* RemoteCam */,
+				4DADF90C0CDD052C1DF15152 /* RemoteCamTests */,
+				40734E8ADDF5D69CA97A87B7 /* RemoteCamActivity */,
+			);
+			sourceTree = "<group>";
+		};
+		FA56820F47F6D4880040E1FB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6A7A2D456ED0DAD46A34DF8B /* RemoteCam.app */,
+				FC884AD0E93CE16B7423C35B /* RemoteCamTests.xctest */,
+				5F1B2C22F134EA8B88845432 /* RemoteCamActivity.appex */,
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		31068908F3588FFC0B272A7C /* RemoteCamTests */ = {
+		069066F81C8AFC1A0D48262A /* RemoteCamTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1C83456CF2137EF4E1D2D044 /* Build configuration list for PBXNativeTarget "RemoteCamTests" */;
+			buildConfigurationList = 34BB2FF1080AE44A91C3764C /* Build configuration list for PBXNativeTarget "RemoteCamTests" */;
 			buildPhases = (
-				A6CBB37F5BAC81C05FFDC32B /* Sources */,
-				073C258E8C91C3D08BD2B51C /* Frameworks */,
-				2ECD2164D585F28ED3DC01D2 /* Resources */,
+				170AB700CABB97C635BE402C /* Sources */,
+				0E0AF7D9C46ECF2A1F6632FB /* Frameworks */,
+				F1093F4394F9C03D69186E07 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -258,35 +273,16 @@
 			);
 			name = RemoteCamTests;
 			productName = RemoteCamTests;
-			productReference = D97091AFF3D5FD4B163E6874 /* RemoteCamTests.xctest */;
+			productReference = FC884AD0E93CE16B7423C35B /* RemoteCamTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		74CBCDEA6FFEAA3AFDEA69FB /* RemoteCam */ = {
+		3C43CC16BC11FD4836DE59C7 /* RemoteCamActivity */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1BC51F0C6C349DA4F040369F /* Build configuration list for PBXNativeTarget "RemoteCam" */;
+			buildConfigurationList = 1D53EB9B4F83EC91B0722179 /* Build configuration list for PBXNativeTarget "RemoteCamActivity" */;
 			buildPhases = (
-				69A6B4130ADCCB55DEA369F4 /* Sources */,
-				69D28B51BDFF5D07F57D4D52 /* Frameworks */,
-				5424F989B8626EDCBE731803 /* Resources */,
-				8EB5AC0956F33FF305EE7D07 /* Embed App Extensions */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				B6D8E3B65FD59A4476AD5EB0 /* PBXTargetDependency */,
-			);
-			name = RemoteCam;
-			productName = RemoteCam;
-			productReference = 813243325D4F26717EE68C91 /* RemoteCam.app */;
-			productType = "com.apple.product-type.application";
-		};
-		D322BB2EB07E171AD3DEF0B7 /* RemoteCamActivity */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = D414DB40B332F7242AF962E2 /* Build configuration list for PBXNativeTarget "RemoteCamActivity" */;
-			buildPhases = (
-				1BEA22A8A9889F19B72CD6C1 /* Sources */,
-				9BA10516879FE924B08C6E77 /* Frameworks */,
-				D5926D21F96234EECA43025F /* Resources */,
+				F64C1D096ADCB43814D3E4B2 /* Sources */,
+				427CC552B17BF8CB74AE206E /* Frameworks */,
+				726A3EB04EC740F89930E590 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -294,19 +290,38 @@
 			);
 			name = RemoteCamActivity;
 			productName = RemoteCamActivity;
-			productReference = B9FF63C8E988B88B0C30E239 /* RemoteCamActivity.appex */;
+			productReference = 5F1B2C22F134EA8B88845432 /* RemoteCamActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		D96320877AA433BE2C943DCC /* RemoteCam */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 67D589F99F56989DE38457F5 /* Build configuration list for PBXNativeTarget "RemoteCam" */;
+			buildPhases = (
+				EB4C0C241491CAD6120D8CF4 /* Sources */,
+				AF080215E31642F0CE4CD7A6 /* Frameworks */,
+				FC96AF5C129893CC466D3E4C /* Resources */,
+				0EB47D5EB2DA2C8C80A08498 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F2E1FAA51D0E3D5E16D4D82D /* PBXTargetDependency */,
+			);
+			name = RemoteCam;
+			productName = RemoteCam;
+			productReference = 6A7A2D456ED0DAD46A34DF8B /* RemoteCam.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		E3BCA103BE1E765659B1C753 /* Project object */ = {
+		5A9FD2046E7EFB3840BB14F0 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 			};
-			buildConfigurationList = E4B0B38DD8844AD87899EB77 /* Build configuration list for PBXProject "RemoteCam" */;
+			buildConfigurationList = 8E4A91602FD70FD752643313 /* Build configuration list for PBXProject "RemoteCam" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -314,291 +329,121 @@
 				en,
 				Base,
 			);
-			mainGroup = FC70B449B0BCF192E2491C7E;
+			mainGroup = D3CB512496A4A8F54D3C2CDA;
 			minimizedProjectReferenceProxies = 0;
 			preferredProjectObjectVersion = 100;
-			productRefGroup = 2F0C61A6FFF34069878C45C8 /* Products */;
+			productRefGroup = FA56820F47F6D4880040E1FB /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				74CBCDEA6FFEAA3AFDEA69FB /* RemoteCam */,
-				31068908F3588FFC0B272A7C /* RemoteCamTests */,
-				D322BB2EB07E171AD3DEF0B7 /* RemoteCamActivity */,
+				D96320877AA433BE2C943DCC /* RemoteCam */,
+				069066F81C8AFC1A0D48262A /* RemoteCamTests */,
+				3C43CC16BC11FD4836DE59C7 /* RemoteCamActivity */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		2ECD2164D585F28ED3DC01D2 /* Resources */ = {
+		726A3EB04EC740F89930E590 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		5424F989B8626EDCBE731803 /* Resources */ = {
+		F1093F4394F9C03D69186E07 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D5926D21F96234EECA43025F /* Resources */ = {
+		FC96AF5C129893CC466D3E4C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F6C1F37BBF2EA71C2D6933F2 /* Assets.xcassets in Resources */,
+				62F9F7D024326CB6488E6E9E /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		1BEA22A8A9889F19B72CD6C1 /* Sources */ = {
+		170AB700CABB97C635BE402C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2ABD5487B8730A3CAD4776D0 /* RemoteCamActivityWidget.swift in Sources */,
-				C4193F206520C2B4A6BF7727 /* RemoteCamActivityAttributes.swift in Sources */,
+				AED70B226066CD5476FADBF7 /* CBORTests.swift in Sources */,
+				FF4A866D512C4938D818BD65 /* ControlMessageTests.swift in Sources */,
+				454E660AEFF6DA9C002DDE97 /* RecentHostsStoreTests.swift in Sources */,
+				AAB189EC777E5557B7B0D9F1 /* VideoEncoderTests.swift in Sources */,
+				C3F4CA1B04A0022937A55991 /* WireFrameTests.swift in Sources */,
+				FD9047196D967BFDBD0236CC /* VideoEncoder.swift in Sources */,
+				0A85BF140D2E9139145D97A5 /* CameraModels.swift in Sources */,
+				E0227209218A185C6505EF34 /* RemoteHost.swift in Sources */,
+				57C02783042C85B6920E25E3 /* StreamConfiguration.swift in Sources */,
+				7F289683BB7FAF08E9F984D6 /* DeviceIdentity.swift in Sources */,
+				CB22FCEB1183B1F4F42DDD2A /* RecentHostsStore.swift in Sources */,
+				29AF851B4E82509745CC7D5F /* CBOR.swift in Sources */,
+				3856BED8C769EB426709270A /* ControlMessage.swift in Sources */,
+				80B8D979EBFE6B43EBDDFAAF /* WireFrame.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		69A6B4130ADCCB55DEA369F4 /* Sources */ = {
+		EB4C0C241491CAD6120D8CF4 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A48DBB20D9E064D31FA45AD6 /* LiveActivityController.swift in Sources */,
-				886897885EDA386150B05E3E /* RemoteCamActivityAttributes.swift in Sources */,
-				A5DBA091E2BEC4CA28404B03 /* AppModel.swift in Sources */,
-				7CBE3B4DB1D284C86682C22C /* RemoteCamApp.swift in Sources */,
-				FAE6B6510A515CB3E7F9A947 /* CameraController.swift in Sources */,
-				92B131367C33411566AEB29C /* CaptureEngine.swift in Sources */,
-				E7E89418F92324F1CF3A1D4E /* VideoEncoder.swift in Sources */,
-				9BC3B1AAD7152254C32C6650 /* BonjourBrowser.swift in Sources */,
-				B53399CF710E99A2002AC16D /* CameraModels.swift in Sources */,
-				42DA79C329789BEB9EF81D03 /* RemoteHost.swift in Sources */,
-				C0874999D930F2EBDBCA0E98 /* StreamConfiguration.swift in Sources */,
-				2619D44F60DC15150D5412D8 /* RemoteCamSession.swift in Sources */,
-				9E55DAEA15996CE004E31997 /* DeviceIdentity.swift in Sources */,
-				351C18AC8A6A2772C1777EBA /* RecentHostsStore.swift in Sources */,
-				D410A4AD5A8668B88F296F39 /* DeviceTelemetry.swift in Sources */,
-				79FFB0ADD1EA58B4E1BD4F84 /* CameraControlsView.swift in Sources */,
-				1BC60FC23821CCF3AA2E1A43 /* CameraPreview.swift in Sources */,
-				21E20885F29585123D920641 /* ManualConnectionView.swift in Sources */,
-				153D89E171AC2C2D23055FAB /* RootView.swift in Sources */,
-				77EF1BDCC33BF6791A7F3AA3 /* StreamView.swift in Sources */,
-				C1E7A29A41F2CD843EAE5CE3 /* CBOR.swift in Sources */,
-				E63C81D5EA1409B0B36F51D2 /* ControlMessage.swift in Sources */,
-				25ABE9026E8D93B94B713D75 /* WireFrame.swift in Sources */,
+				578C5DEBD443D57ABEFB2161 /* LiveActivityController.swift in Sources */,
+				37050326229172CC54142E76 /* RemoteCamActivityAttributes.swift in Sources */,
+				203DD2E3563835F08B4778D9 /* AppModel.swift in Sources */,
+				6850C9F80B7CB54FD8F08763 /* RemoteCamApp.swift in Sources */,
+				598E85F6861926224B57195E /* CameraController.swift in Sources */,
+				069FC4038F38965D80F8128E /* CaptureEngine.swift in Sources */,
+				2CAC01C979D1475E3E547A09 /* VideoEncoder.swift in Sources */,
+				4359908447076906FC00BA98 /* BonjourBrowser.swift in Sources */,
+				310B06011804E51B87C21CE9 /* CameraModels.swift in Sources */,
+				F9307DEAEBF279366F1A1752 /* RemoteHost.swift in Sources */,
+				FCDB01D1633B8C170424B9E6 /* StreamConfiguration.swift in Sources */,
+				A5AD8DB695D2CB413B343B0B /* RemoteCamSession.swift in Sources */,
+				49D539D3267B64B95AC10F9D /* DeviceIdentity.swift in Sources */,
+				DD5EE9B63C672AF9388CEF75 /* RecentHostsStore.swift in Sources */,
+				F8505AC32585FD3328692C37 /* DeviceTelemetry.swift in Sources */,
+				743FA355719F5762179680C7 /* CameraControlsView.swift in Sources */,
+				D3D06FE53D82BC5F8B19BA81 /* CameraPreview.swift in Sources */,
+				9A7D18DBDCA0017C81696523 /* DiagnosticsView.swift in Sources */,
+				CC443B7F16D5B44DB8FFB377 /* ManualConnectionView.swift in Sources */,
+				43C7F832466D0DC935615007 /* RootView.swift in Sources */,
+				0EAFAD23A1094EC4ED7DAE37 /* StreamView.swift in Sources */,
+				C2641768E291CA4FC38FA35A /* CBOR.swift in Sources */,
+				622B4E3590917ACCCE052241 /* ControlMessage.swift in Sources */,
+				15882E97E98FF53EA3B15844 /* WireFrame.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A6CBB37F5BAC81C05FFDC32B /* Sources */ = {
+		F64C1D096ADCB43814D3E4B2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BA4A00212944A52EC9AC5479 /* CBORTests.swift in Sources */,
-				39EBCBBDA75D00530B56CFC2 /* ControlMessageTests.swift in Sources */,
-				25DE5285E00709901B4F639E /* RecentHostsStoreTests.swift in Sources */,
-				5D84FDD2A96D70114C8ACCCB /* WireFrameTests.swift in Sources */,
-				97FCEB342C39D54CC8C9A98B /* CameraModels.swift in Sources */,
-				22339C4B6D7316E84CA1781D /* RemoteHost.swift in Sources */,
-				DE881566CC5F6810A716649A /* StreamConfiguration.swift in Sources */,
-				FD8B49186DF7968B5A701071 /* DeviceIdentity.swift in Sources */,
-				5BF069AA626F4D2527D8E884 /* RecentHostsStore.swift in Sources */,
-				60FC1542B39DB26448825938 /* CBOR.swift in Sources */,
-				C3A7BA56C25F7F043A53678F /* ControlMessage.swift in Sources */,
-				6919C4E65C20F1E2EE8FB948 /* WireFrame.swift in Sources */,
+				629F5D6A5933B346543E7E2C /* RemoteCamActivityWidget.swift in Sources */,
+				5AFAE14EDE212D4C43A2D69B /* RemoteCamActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		B6D8E3B65FD59A4476AD5EB0 /* PBXTargetDependency */ = {
+		F2E1FAA51D0E3D5E16D4D82D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = RemoteCamActivity;
-			target = D322BB2EB07E171AD3DEF0B7 /* RemoteCamActivity */;
-			targetProxy = B889F4FD8348A78BE7358411 /* PBXContainerItemProxy */;
+			target = 3C43CC16BC11FD4836DE59C7 /* RemoteCamActivity */;
+			targetProxy = 949DF2E7043E623C05722BBE /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		0425B1520F6B131CB2C5CD7D /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = RemoteCam/Configuration/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		0899E4E940A54CF619F432AB /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = RemoteCamActivity/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.activity;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		0DB336974B75D497A1310EFF /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = RemoteCam/Configuration/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		11231C441677651F4417341C /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
-			};
-			name = Release;
-		};
-		23494246A1B1FAAD1AD38917 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = RemoteCamActivity/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.activity;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		82C1C844019C1DE7D77D7315 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.tests;
-				SDKROOT = iphoneos;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		9BAF2457A26F8A4DAE08505F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.tests;
-				SDKROOT = iphoneos;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		ADDEDF844D3466E12DCD7094 /* Debug */ = {
+		20B7458DC3D1EADAD2879692 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -659,46 +504,221 @@
 			};
 			name = Debug;
 		};
+		284A8482DC9623675B415601 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		2B540241A83DE56BCDD246D4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.tests;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		427C04B4D7EF780EEEDA31AF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RemoteCam/Configuration/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		719CE90F114DB0E1016EBF53 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.tests;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9DB8EEDCCD9531F22E877AF6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RemoteCam/Configuration/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D2E859E845978C883CE9C968 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RemoteCamActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.activity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		FD47E4392713C2149E20EFDB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RemoteCamActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.remotecam.ios.activity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		1BC51F0C6C349DA4F040369F /* Build configuration list for PBXNativeTarget "RemoteCam" */ = {
+		1D53EB9B4F83EC91B0722179 /* Build configuration list for PBXNativeTarget "RemoteCamActivity" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				0DB336974B75D497A1310EFF /* Release */,
-				0425B1520F6B131CB2C5CD7D /* Debug */,
+				FD47E4392713C2149E20EFDB /* Release */,
+				D2E859E845978C883CE9C968 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1C83456CF2137EF4E1D2D044 /* Build configuration list for PBXNativeTarget "RemoteCamTests" */ = {
+		34BB2FF1080AE44A91C3764C /* Build configuration list for PBXNativeTarget "RemoteCamTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				82C1C844019C1DE7D77D7315 /* Release */,
-				9BAF2457A26F8A4DAE08505F /* Debug */,
+				2B540241A83DE56BCDD246D4 /* Release */,
+				719CE90F114DB0E1016EBF53 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D414DB40B332F7242AF962E2 /* Build configuration list for PBXNativeTarget "RemoteCamActivity" */ = {
+		67D589F99F56989DE38457F5 /* Build configuration list for PBXNativeTarget "RemoteCam" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				0899E4E940A54CF619F432AB /* Release */,
-				23494246A1B1FAAD1AD38917 /* Debug */,
+				9DB8EEDCCD9531F22E877AF6 /* Release */,
+				427C04B4D7EF780EEEDA31AF /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E4B0B38DD8844AD87899EB77 /* Build configuration list for PBXProject "RemoteCam" */ = {
+		8E4A91602FD70FD752643313 /* Build configuration list for PBXProject "RemoteCam" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				ADDEDF844D3466E12DCD7094 /* Debug */,
-				11231C441677651F4417341C /* Release */,
+				20B7458DC3D1EADAD2879692 /* Debug */,
+				284A8482DC9623675B415601 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = E3BCA103BE1E765659B1C753 /* Project object */;
+	rootObject = 5A9FD2046E7EFB3840BB14F0 /* Project object */;
 }

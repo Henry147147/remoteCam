@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
 
     @Published var connectionPhase: ConnectionPhase = .idle
     @Published var showingManualConnection = false
+    @Published var showingDiagnostics = false
     @Published var streamError: String?
     private var currentConfiguration: StreamConfiguration?
     private var lastTelemetry: DeviceTelemetrySnapshot?
@@ -51,7 +52,7 @@ final class AppModel: ObservableObject {
 
     func connect(to host: RemoteHost) {
         let endpoint: NWEndpoint?
-        if host.source == .bonjour {
+        if host.source == .bonjour || (host.source == .recent && host.port == 0) {
             endpoint = discovery.endpoint(for: host)
         } else if let port = NWEndpoint.Port(rawValue: host.port) {
             endpoint = .hostPort(host: NWEndpoint.Host(host.hostname), port: port)

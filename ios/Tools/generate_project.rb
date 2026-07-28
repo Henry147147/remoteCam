@@ -22,6 +22,10 @@ Dir.glob(File.join(root, 'RemoteCam/Sources/**/*.swift')).sort.each do |path|
   reference = sources_group.new_file(path.sub(root + '/', ''))
   app.add_file_references([reference])
 end
+assets = sources_group.new_file('RemoteCam/Resources/Assets.xcassets')
+app.resources_build_phase.add_file_reference(assets)
+privacy_manifest = sources_group.new_file('RemoteCam/Resources/PrivacyInfo.xcprivacy')
+app.resources_build_phase.add_file_reference(privacy_manifest)
 
 tests_group = project.main_group.new_group('RemoteCamTests')
 Dir.glob(File.join(root, 'RemoteCamTests/**/*.swift')).sort.each do |path|
@@ -40,13 +44,18 @@ end
 
 # Keep protocol/storage tests independent of an application host. This makes the
 # suite reliable on CI and avoids launching a camera-capable app in the simulator.
-Dir.glob(File.join(root, 'RemoteCam/Sources/{Models,Storage,Wire}/**/*.swift')).sort.each do |path|
+shared_test_sources = Dir.glob(File.join(root, 'RemoteCam/Sources/{Models,Storage,Wire}/**/*.swift')) + [
+  File.join(root, 'RemoteCam/Sources/Capture/VideoEncoder.swift')
+]
+shared_test_sources.sort.each do |path|
   reference = tests_group.new_file(path.sub(root + '/', ''))
   tests.add_file_references([reference])
 end
 
 app.build_configurations.each do |config|
   config.build_settings.merge!({
+    'ASSETCATALOG_COMPILER_APPICON_NAME' => 'AppIcon',
+    'ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME' => 'AccentColor',
     'ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS' => 'YES',
     'CODE_SIGN_STYLE' => 'Automatic',
     'CURRENT_PROJECT_VERSION' => '1',

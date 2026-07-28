@@ -33,6 +33,8 @@ actor CaptureEngine {
     private var input: AVCaptureDeviceInput?
     private var selectedDevice: AVCaptureDevice?
     private var configuration: StreamConfiguration = .default1080p
+    private var requestedFocusMode: FocusMode = .auto
+    private var requestedWhiteBalanceMode: WhiteBalanceMode = .auto
 
     init(sampleHandler: @escaping @Sendable (CMSampleBuffer) -> Void) {
         delegate = SampleBufferRelay(handler: sampleHandler)
@@ -82,6 +84,8 @@ actor CaptureEngine {
         }
 
         try Self.selectFormat(on: device, configuration: configuration)
+        requestedFocusMode = .auto
+        requestedWhiteBalanceMode = .auto
         if let connection = output.connection(with: .video), connection.isVideoMirroringSupported {
             connection.automaticallyAdjustsVideoMirroring = false
             connection.isVideoMirrored = false
@@ -126,6 +130,7 @@ actor CaptureEngine {
             if device.isExposurePointOfInterestSupported { device.exposurePointOfInterest = point }
             if device.isFocusModeSupported(.autoFocus) { device.focusMode = .autoFocus }
             if device.isExposureModeSupported(.autoExpose) { device.exposureMode = .autoExpose }
+            requestedFocusMode = .auto
         }
 
         if let focusMode = update.focusMode {
@@ -139,8 +144,10 @@ actor CaptureEngine {
             default:
                 break
             }
+            requestedFocusMode = focusMode
         } else if let focus = update.focus, device.isLockingFocusWithCustomLensPositionSupported {
             device.setFocusModeLocked(lensPosition: Float(min(max(focus, 0), 1)))
+            requestedFocusMode = .manual
         }
 
         if let exposureMode = update.exposureMode {
@@ -179,9 +186,11 @@ actor CaptureEngine {
             default:
                 break
             }
+            requestedWhiteBalanceMode = whiteBalanceMode
         } else if let kelvin = update.whiteBalanceKelvin,
                   device.isLockingWhiteBalanceWithCustomDeviceGainsSupported {
             device.setWhiteBalanceModeLocked(with: Self.whiteBalanceGains(kelvin: kelvin, device: device))
+            requestedWhiteBalanceMode = .manual
         }
 
         if let torchEnabled = update.torchEnabled, device.hasTorch, device.isTorchAvailable {
@@ -255,6 +264,9 @@ actor CaptureEngine {
         let duration = CMTime(value: 1, timescale: CMTimeScale(configuration.framesPerSecond))
         device.activeVideoMinFrameDuration = duration
         device.activeVideoMaxFrameDuration = duration
+        if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+        if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { device.whiteBalanceMode = .continuousAutoWhiteBalance }
     }
 
     private static func clampedDuration(_ seconds: Double?, for device: AVCaptureDevice) -> CMTime {
@@ -311,6 +323,8 @@ actor CaptureEngine {
 
     private func controlStateForCurrentOutput(_ device: AVCaptureDevice) -> CameraControlState {
         var state = Self.controlState(for: device)
+        state.focusMode = requestedFocusMode
+        state.whiteBalanceMode = requestedWhiteBalanceMode
         if let mode = output.connection(with: .video)?.preferredVideoStabilizationMode {
             state.stabilizationEnabled = mode != .off
         }

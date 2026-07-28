@@ -4,7 +4,10 @@
 > (12,101 assertions passing, under both GCC and MSVC). **M1 is written and building**
 > — the virtual camera DLL, its registration helper, a two-stack probe, the `Global\`
 > frame ring and a stand-in producer, with 111 more assertions passing — but has not
-> yet been verified against a live camera. See
+> yet been verified against a live camera. The **iOS capture client is written and
+> building** — capture, low-latency encoding, transport, controls, telemetry,
+> background setup, and Live Activity — with 9 simulator tests passing, but it has
+> not run on hardware or against a Windows receiver. See
 > [Status and handoff](#status-and-handoff) at the end of this document for who owns
 > what and where to pick up. Agent operating guide is in [CLAUDE.md](CLAUDE.md).
 >
@@ -338,9 +341,21 @@ What that does **not** yet prove: that Windows loads the DLL, that either stack 
 frames from it, or that the Session 0 handoff works. Those need an elevated
 `--register` and a hand pass over the consumer matrix. Until then M1 is unverified.
 
+**iOS M0/M2 client — written and building, device verification outstanding.** The
+Swift 6 app has Bonjour/manual/recent discovery, bounded framing and deterministic
+CBOR, reconnect, multi-lens AVCapture, tap focus and manual camera controls,
+VideoToolbox H.264/HEVC with parameter sets on every keyframe, ABR updates,
+orientation/battery/thermal telemetry, background multitasking setup, preview power
+saving, diagnostics, and a visible Live Activity. Release compiles for iPhoneOS and
+the simulator suite passes 9 tests with the hardware-encoder test skipped where no
+encoder exists. It has not been installed/run on an iPhone or streamed to Windows.
+The integration contract and blockers are in `docs/ios-backend-handoff.md`.
+
 ### Not done
 
-Everything else.
+Windows transport/decoder/pipeline/UI, production pairing/authentication/media
+encryption, the USB listener/tunnel contract, effects, OBS, recorder, and installer.
+The iOS hardware/background/thermal verification matrix also remains open.
 
 ### Where to pick up
 
@@ -352,13 +367,14 @@ than working around it**; the fallbacks are a small always-on broker service tha
 the section, or `MFVirtualCameraAccess_CurrentUser`, and that choice reshapes the
 design.
 
-**Mac agent — M0.** Capture → `VTCompressionSession` → `NWConnection`, streaming to
-`rc-fakephone`'s counterpart or a scratch TCP sink, to establish the real capture and
-encode latency early. The protocol codec can follow.
+**Mac agent — verify and integrate.** Enable Developer Mode and provisioning, run the
+device matrix in `ios/CLAUDE.md`, and integrate production pairing/USB after the
+joint protocol decisions in `docs/ios-backend-handoff.md` are normative.
 
-**Linux agent — M0/M3 core work.** Protocol framing codec and its round-trip tests,
-SPAKE2 pairing, the usbmux plist client, the adaptive-bitrate controller. All
-portable, all testable without hardware.
+**Linux/Windows agent — M0/M3 shared work.** Implement the Windows listener,
+protocol codec, decoder, usbmux plist client, and adaptive-bitrate controller. Do not
+choose SPAKE2/HMAC/AEAD details independently; first resolve every item in the
+security-decision section of `docs/ios-backend-handoff.md`.
 
 ### Corrections to the original plan
 

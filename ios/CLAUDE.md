@@ -63,6 +63,25 @@ so raise it rather than editing unilaterally.
 Framing is a 16-byte header, all integers big-endian; channel 2 is reserved for audio
 and must be **ignored, not rejected**, by a v1 receiver.
 
+## Current status — 2026-07-28
+
+The Swift 6 project is in `RemoteCam.xcodeproj`. Implemented: Bonjour/manual/recent
+connections, reconnect, bounded framing, deterministic CBOR, multi-lens AVCapture,
+tap focus and manual controls, low-latency H.264/HEVC Annex-B encode, stats bitrate,
+orientation/battery/thermal reporting, PC-driven preview saving, diagnostics,
+multitasking capture setup, and Live Activity.
+
+The simulator suite reports 9 passing tests and one expected VideoToolbox skip; the
+Release target compiles for iPhoneOS. It has **not** run on a physical device: this
+Mac has no signed-in Xcode account/provisioning profile and the connected phone has
+Developer Mode disabled. Do not describe capture, encode, background operation, or
+thermals as verified.
+
+Production pairing, authenticated control/media encryption, and USB remain blocked
+by underspecified shared protocol decisions. Release rejects unauthenticated
+`ready`; a Debug-only `--allow-insecure-session` launch argument exists solely for
+the fake-PC development harness. See `../docs/ios-backend-handoff.md`.
+
 ## Verification
 
 Device-only, by hand:

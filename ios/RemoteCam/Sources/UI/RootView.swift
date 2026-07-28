@@ -22,6 +22,13 @@ struct RootView: View {
             }
             .navigationTitle("RemoteCam")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        model.showingDiagnostics = true
+                    } label: {
+                        Label("Diagnostics", systemImage: "waveform.path.ecg")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         model.showingManualConnection = true
@@ -34,6 +41,10 @@ struct RootView: View {
                 ManualConnectionView { host in
                     model.connect(to: host)
                 }
+            }
+            .sheet(isPresented: $model.showingDiagnostics) {
+                DiagnosticsView(camera: model.camera, telemetry: model.telemetry)
+                    .environmentObject(model)
             }
             .task { model.start() }
         }

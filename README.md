@@ -3,8 +3,11 @@
 Use your iPhone as a webcam on Windows 11. Free, open source, no watermark, no ads,
 no tiers, nothing gated behind a purchase.
 
-**Status: early development.** Nothing is usable yet. See [PLAN.md](PLAN.md) for the
-full design and milestones.
+**Status: active development.** The iOS capture app and Windows virtual-camera
+foundation now build, but a secure end-to-end stream is not available until the
+Windows listener/decoder and the pairing contract are completed. See [PLAN.md](PLAN.md)
+for milestones and [the iOS/backend handoff](docs/ios-backend-handoff.md) for the
+current integration work.
 
 ## Why
 
@@ -68,6 +71,10 @@ needs Xcode on macOS. Neither cross-compiles; CI builds them on `windows-latest`
 The split is load-bearing: keeping the transform math and protocol free of platform
 APIs is what lets the trickiest logic be unit-tested on any machine, including CI
 runners with no GPU.
+
+RemoteCam has no cloud service, analytics, ads, or tracking. See the
+[privacy document](docs/privacy.md) for the data exchanged directly between the
+phone and the selected PC.
 
 ## Licence
 

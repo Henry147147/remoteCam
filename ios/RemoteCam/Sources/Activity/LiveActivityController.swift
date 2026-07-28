@@ -6,6 +6,10 @@ final class LiveActivityController {
     private var activity: Activity<RemoteCamActivityAttributes>?
 
     func start(host: RemoteHost, configuration: StreamConfiguration) async {
+        if activity != nil {
+            await update(host: host, configuration: configuration, status: "Live")
+            return
+        }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let state = RemoteCamActivityAttributes.ContentState(
             hostName: host.name,
