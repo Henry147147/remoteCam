@@ -11,47 +11,92 @@ with `mfvirtualcamera.h` / `mfsensorgroup.lib`. FFmpeg built **without**
 `--enable-gpl`. Optional: NVIDIA Maxine redistributable and an RTX card for the
 Maxine path; the build must succeed and the app must run without either.
 
+**x64 only.** The Frame Server is a 64-bit process and will never load a 32-bit
+in-proc server; `windows/CMakeLists.txt` fails at configure time rather than letting
+you produce a camera that registers and then silently never delivers a frame.
+
+Verified working on the dev box: MSVC 19.44 (VS 2022 Build Tools), Windows SDK
+**10.0.26100.0**, CMake 3.26.3, Ninja 1.11.1. Qt 6 and a linkable FFmpeg are not
+installed and **M1 needs neither** — the virtual camera, its tools and its tests build
+with nothing beyond the SDK.
+
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=<qt6>
-cmake --build build --config Debug -j
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
+Binaries land in `build/bin/` so `rc-vcam-register.exe` finds `rc-vcam.dll` beside
+itself.
+
 ## Targets, in build order
 
-| Target | What |
-|---|---|
-| `windows/vcam/` | `rc-vcam.dll` — MF media source COM server. Loaded by the Frame Server in Session 0, **not** by our app. |
-| `windows/register/` | `rc-vcam-register.exe` — elevated one-shot registration. Install time only. |
-| `windows/platform/` | D3D11 pipeline, FFmpeg `d3d11va` decode, effects, SHM writer. Everything platform-bound that `core/` may not touch. |
-| `windows/app/` | Qt 6 / QML client, tray, hotkeys. |
-| `windows/tools/` | `rc-fakephone` (replays a video file over the real protocol), `rc-vcam-probe` (opens the vcam via MF *and* DirectShow, dumps frames). |
-| `windows/obs-plugin/` | Reads the same SHM ring directly, skipping the vcam round-trip. |
-| `windows/installer/` | WiX MSI. |
+| Target | State | What |
+|---|---|---|
+| `windows/common/` | **built** | `rcwin-common` — Win32 helpers, logging, NV12 geometry, the test pattern, the `Global\` frame ring. Plus `rcwin-common-tests`. |
+| `windows/vcam/` | **built** | `rc-vcam.dll` — MF media source COM server. Loaded by the Frame Server in Session 0, **not** by our app. |
+| `windows/register/` | **built** | `rc-vcam-register.exe` — elevated one-shot registration. Install time only. |
+| `windows/tools/` | **built** | `rc-vcam-probe` (opens the vcam via MF *and* DirectShow, dumps frames), `rc-fakewriter` (publishes into the ring). `rc-fakephone` still to come. |
+| `windows/platform/` | not started | D3D11 pipeline, FFmpeg `d3d11va` decode, effects, SHM writer. Everything platform-bound that `core/` may not touch. |
+| `windows/app/` | not started | Qt 6 / QML client, tray, hotkeys. |
+| `windows/obs-plugin/` | not started | Reads the same SHM ring directly, skipping the vcam round-trip. |
+| `windows/installer/` | not started | WiX MSI. |
 
-## Start here — M1, the virtual camera
+## M1 — the virtual camera. Written; verification outstanding.
 
-This is the highest-risk item in the project. Prototype it before building anything
-on top of it. The order that de-risks fastest:
+The code exists and compiles clean. **What has not happened is running it against a
+real camera consumer**, and until that has been done M1 is not proven. Do this, in
+order:
 
-1. `rc-vcam.dll` producing a **static test pattern**, registered via
-   `rc-vcam-register.exe`, verified with `rc-vcam-probe` through both MF and
-   DirectShow. No networking, no pipeline, no Qt.
-2. Then the `Global\` shared-memory ring and a trivial writer process, proving the
-   Session 0 handoff.
-3. Only then wire it to the real pipeline.
+```bash
+cmake --build build --config Debug
+```
 
-**If step 2 fails**, the fallbacks in PLAN.md are: run the frame producer as a
-Windows service, or try `MFVirtualCameraAccess_CurrentUser` to see whether the source
-stays in-session. Escalate before working around it — this decision shapes everything
-downstream.
+Then from an **elevated** prompt, once:
 
-Ring buffer design is in PLAN.md §1: 4 NV12 slots, seqlock plus auto-reset event so
-the writer never blocks, system-memory frames staged out of D3D11 with 3 rotating
-staging textures and a fence.
+```bash
+build\bin\rc-vcam-register.exe --register
+```
+
+Then, unelevated:
+
+```bash
+build\bin\rc-vcam-probe.exe --mf --frames 60
+```
+
+```bash
+build\bin\rc-vcam-probe.exe --directshow --frames 60
+```
+
+The probe asserts two independent properties, because they fail for unrelated reasons
+and look identical in a preview window: the pattern's **static region** must hash the
+same on every frame (proves stride, plane offsets and colour range are right) and its
+**moving region** must differ on every frame (proves the camera is live rather than
+repeating one frame). Both properties are also covered by `rcwin-common-tests`, so a
+probe failure indicts the camera path rather than the generator.
+
+Finally, the actual Session 0 proof: open a consumer, confirm the "WAITING FOR PHONE"
+placeholder, then run `build\bin\rc-fakewriter.exe`. The picture must switch to the
+"SHM WRITER" pattern within ~250 ms and revert when the writer is killed.
+
+**If that last step fails**, the fallbacks in PLAN.md are: a small always-on broker
+service that owns the section, or `MFVirtualCameraAccess_CurrentUser`. Escalate before
+working around it — this decision shapes everything downstream.
+
+`--session` creates a Session-lifetime camera that disappears when the process exits,
+which makes it the right iteration loop after a rebuild. It still needs elevation:
+`MFCreateVirtualCamera` returns `E_ACCESSDENIED` unelevated regardless of lifetime.
 
 **Always produce frames.** When no phone is connected, emit a placeholder — several
 apps drop or error on a stalled device.
+
+### Debugging inside Session 0
+
+There is no console, no message box anyone will see, and no debugger attached. Every
+component logs to `%ProgramData%\RemoteCam\logs\` (and `OutputDebugStringW`); the
+directory is created with a DACL granting LOCAL SERVICE write by
+`rc-vcam-register.exe --register`. **Read `rc-vcam.log` first** on any "camera is
+black" report — it is the only window into the Frame Server's copy of our code.
 
 ## Consuming `core/`
 

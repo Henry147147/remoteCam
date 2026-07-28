@@ -9,13 +9,20 @@ jobs:
   # The core is where the transform math and wire protocol live, and it is
   # deliberately free of platform APIs so it can be tested on the cheapest runner
   # available. This job is the one that gates merges.
+  #
+  # Windows is deliberately absent from this matrix: the root CMakeLists pulls in
+  # windows/ whenever WIN32, so a Windows entry here would build the whole client and
+  # report it under the name "core". The windows-client job below covers that properly,
+  # and it builds core/ on MSVC on the way through. What this matrix is actually for is
+  # catching a platform dependency creeping into core/ -- and non-Windows runners are
+  # exactly what detects that.
   core:
     name: core (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -28,16 +35,28 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Debug --output-on-failure
 
-  # Placeholder. Enable once windows/ has something to build; the Windows client
-  # cannot be cross-compiled from the Linux dev box, so this job is the only way the
-  # D3D11 and Media Foundation code gets compiled at all.
+  # The Windows client cannot be cross-compiled from a Linux dev box, so this job is
+  # the only place the Media Foundation and Win32 code gets compiled at all.
+  #
+  # It builds and runs rcwin-common-tests, which covers NV12 geometry, the test pattern
+  # invariants and the shared-memory seqlock -- all of which work on a runner. It does
+  # NOT verify the virtual camera itself: that needs an elevated registration and a
+  # real camera consumer, which a hosted runner cannot provide. Registering a
+  # system-wide virtual camera on a throwaway VM would prove nothing anyway.
   windows-client:
     name: windows client
     runs-on: windows-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
-      - run: echo "TODO: Qt 6 + MSVC build of windows/"
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DRC_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Debug
+
+      - name: Test
+        run: ctest --test-dir build --build-config Debug --output-on-failure
 
   # Placeholder. Enable once ios/ exists. Builds only -- the simulator has no camera,
   # so capture is verified on device by hand.

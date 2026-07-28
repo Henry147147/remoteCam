@@ -1,0 +1,13 @@
+; Only the two entry points COM needs.
+;
+; DllRegisterServer and DllUnregisterServer are deliberately absent: registration is
+; done by rc-vcam-register.exe, which writes to HKLM\SOFTWARE\Classes. regsvr32 would
+; call DllRegisterServer under UAC redirection and land the keys in a per-user hive
+; that Session 0 cannot read -- producing a camera that enumerates but never delivers a
+; frame. Not exporting them makes that mistake impossible rather than merely
+; discouraged.
+LIBRARY rc-vcam
+
+EXPORTS
+    DllGetClassObject   PRIVATE
+    DllCanUnloadNow     PRIVATE

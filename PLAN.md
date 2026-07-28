@@ -1,14 +1,16 @@
 # RemoteCam — Open-Source iVCam Replacement
 
 > **Status — 2026-07-28.** `core/` transform math is implemented and verified
-> (12,101 assertions passing). Everything else is unstarted; nothing is committed to
-> git yet. See [Status and handoff](#status-and-handoff) at the end of this document
-> for who owns what and where to pick up. Agent operating guide is in
-> [CLAUDE.md](CLAUDE.md).
+> (12,101 assertions passing, under both GCC and MSVC). **M1 is written and building**
+> — the virtual camera DLL, its registration helper, a two-stack probe, the `Global\`
+> frame ring and a stand-in producer, with 111 more assertions passing — but has not
+> yet been verified against a live camera. See
+> [Status and handoff](#status-and-handoff) at the end of this document for who owns
+> what and where to pick up. Agent operating guide is in [CLAUDE.md](CLAUDE.md).
 >
-> **Two errors in the original plan have been corrected in place** — the fit modes
-> in §2 and the pan clamping they imply. Both are described in
-> [Corrections](#corrections-to-the-original-plan).
+> **Three errors in the original plan have been corrected in place** — the fit modes
+> in §2, the pan clamping they imply, and who creates the shared-memory section in §1.
+> All three are described in [Corrections](#corrections-to-the-original-plan).
 
 ## Context
 
@@ -104,8 +106,8 @@ Critical implementation facts established during research:
 
 **Frame handoff (`windows/platform/sink/shm_writer.cpp` ↔ `windows/vcam/frame_reader.cpp`):**
 
-- Named section `Global\RemoteCam.Frames.0`, DACL granting read to `LOCAL SERVICE` and `ALL APPLICATION PACKAGES`.
-- Ring of 4 NV12 slots + header (`{magic, version, width, height, fps, format_generation, write_seq, slot_seq[4]}`).
+- Named section `Global\RemoteCam.Frames.0`, **created by `rc-vcam.dll` in Session 0 and merely opened by the producer** — see [Corrections](#corrections-to-the-original-plan) for why it cannot be the other way round. DACL grants full access to LOCAL SERVICE, read+write to `INTERACTIVE` so the unelevated producer can publish, and read to `ALL APPLICATION PACKAGES` so packaged consumers like the Windows Camera app work.
+- Ring of 4 NV12 slots + header (`{magic, version, width, height, fps, format_generation, write_seq, slot_seq[4]}`). Slots are sized for 4K up front (~50 MB total) so a resolution change is a `format_generation` bump rather than a re-created section every reader would have to reopen.
 - **Seqlock + auto-reset event** (`Global\RemoteCam.Frame.0`) so the writer never blocks and torn reads are detectable by the reader.
 - Frames are **system-memory NV12**, staged out of D3D11 with 3 rotating staging textures and a fence so readback never stalls the render thread. 1080p60 ≈ 187 MB/s, 4K60 ≈ 750 MB/s — acceptable.
 - *Optimization spike (not v1):* NT-handle-shared D3D11 textures duplicated into the Frame Server process. Cross-session `DuplicateHandle` into a Session 0 service is likely blocked; measure before committing.
@@ -321,22 +323,34 @@ ctest --test-dir build --output-on-failure
 ```
 
 Also written: `docs/protocol.md` (draft, unimplemented), `README.md`, `.gitignore`,
-and CI that builds `core/` on all three runners with the platform jobs stubbed behind
-`if: false`.
+and CI that builds `core/` on all three runners.
+
+**M1 — written and building, verification outstanding.** On the Windows box:
+`windows/common/` (Win32 helpers, NV12 geometry, the test pattern, the `Global\` frame
+ring), `windows/vcam/` (`rc-vcam.dll`, the MF media source), `windows/register/`
+(`rc-vcam-register.exe`), and `windows/tools/` (`rc-vcam-probe.exe` for MF **and**
+DirectShow, `rc-fakewriter.exe` as a stand-in producer). Everything compiles clean at
+`/W4 /permissive-` and `rcwin-common-tests` passes 111 assertions, including a threaded
+seqlock contention test that races ~1600 concurrent reads against 3000 writes with zero
+torn frames.
+
+What that does **not** yet prove: that Windows loads the DLL, that either stack pulls
+frames from it, or that the Session 0 handoff works. Those need an elevated
+`--register` and a hand pass over the consumer matrix. Until then M1 is unverified.
 
 ### Not done
 
-Everything else. **Nothing is committed to git yet.**
+Everything else.
 
 ### Where to pick up
 
-**Windows agent — M1, not M0.** The virtual camera is the highest-risk item in the
-project and everything else is built on top of it, so de-risk it first, in this
-order: a `rc-vcam.dll` emitting a static test pattern, verified by `rc-vcam-probe`
-through both MF and DirectShow → the `Global\` shared-memory ring proving the Session
-0 handoff → only then the real pipeline. If the handoff fails, escalate rather than
-working around it; the fallbacks are a frame-producing Windows service or
-`MFVirtualCameraAccess_CurrentUser`, and that choice reshapes the design.
+**Windows agent — finish M1's verification.** The code is written; run it. In order:
+`rc-vcam-register.exe --register` from an elevated prompt → `rc-vcam-probe --mf` and
+`--directshow` → the consumer matrix by hand → `rc-fakewriter.exe` while a consumer is
+open, which is the actual Session 0 proof. If that last step fails, **escalate rather
+than working around it**; the fallbacks are a small always-on broker service that owns
+the section, or `MFVirtualCameraAccess_CurrentUser`, and that choice reshapes the
+design.
 
 **Mac agent — M0.** Capture → `VTCompressionSession` → `NWConnection`, streaming to
 `rc-fakephone`'s counterpart or a scratch TCP sink, to establish the real capture and
@@ -366,6 +380,31 @@ once, so the permitted region is a rotated rectangle, not an axis-aligned box �
 is no single "maximum panX" to return. `rc::panSlack` reports slack in source space
 and `rc::clampPanForCoverage` projects into source axes, clamps, and maps back. A
 per-axis clamp passes casual testing and leaks a black wedge at odd angles.
+
+**3. The frame producer cannot create the shared-memory section; the DLL must.** §1
+originally had the app's SHM writer create `Global\RemoteCam.Frames.0`. Creating any
+object in the `Global\` namespace requires `SeCreateGlobalPrivilege`, which a
+non-elevated interactive process does not hold — `CreateFileMapping` returns
+`ERROR_ACCESS_DENIED`. Measured on the dev machine:
+
+```
+GLOBAL CREATE: FAILED -> Access to the path is denied.
+LOCAL CREATE: SUCCEEDED
+```
+
+`whoami /priv` shows the privilege absent and `BUILTIN\Administrators` marked *deny
+only* under the UAC-filtered token. Elevating a consumer webcam app to work around this
+is not an acceptable trade. *Opening* a `Global\` object needs no privilege, only DACL
+permission, so the roles are inverted: `rc-vcam.dll` runs inside the Frame Server as
+LOCAL SERVICE — which does hold the privilege — and creates the section; the producer
+opens it. **Consequence: the ring exists only while some application has the camera
+open.** That is not a limitation in practice, because with no consumer there is nobody
+to send frames to, but it does mean the producer polls for the ring rather than
+expecting it to be there.
+
+Related, measured at the same time: `MFCreateVirtualCamera` returns `E_ACCESSDENIED`
+when unelevated **even with `MFVirtualCameraLifetime_Session`**, so session lifetime is
+a convenience for dev iteration, not a way to avoid the one-time admin step.
 
 **Convention fixed while implementing:** positive `rotationDeg` is **clockwise as
 displayed**, so the UI's "rotate right" button is +90. Rotation is applied about the

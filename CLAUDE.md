@@ -57,6 +57,28 @@ Researched at project start. Re-discovering any of these costs hours.
 - **The Frame Server loads our DLL, not our app** — `svchost.exe -k Camera`, running
   as LOCAL SERVICE in **Session 0**. Frames must cross a session boundary via
   `Global\`-prefixed shared memory and events with a DACL granting LOCAL SERVICE.
+- **The DLL creates the `Global\` section; the app opens it — not the other way
+  round.** Creating anything in the `Global\` namespace needs
+  `SeCreateGlobalPrivilege`, which a non-elevated interactive process does **not**
+  hold: `CreateFileMapping` fails with `ERROR_ACCESS_DENIED`. Verified on the dev box —
+  `whoami /priv` lists no such privilege and `BUILTIN\Administrators` is *deny only*
+  under the UAC-filtered token. *Opening* a `Global\` object needs no privilege, only
+  DACL permission, so `rc-vcam.dll` (LOCAL SERVICE, which does hold it) calls
+  `create()` and the producer calls `open()`. Consequence: the ring only exists while
+  some consumer has the camera open. Elevating the app is not an option.
+- **`MFCreateVirtualCamera` needs elevation even for `MFVirtualCameraLifetime_Session`.**
+  Measured: it returns `E_ACCESSDENIED` unelevated. Session lifetime is still the right
+  dev loop — it leaves nothing behind — but it is not an escape from the admin
+  requirement.
+- **Include the KS headers *after* the COM/MF ones.** `ks.h` macro-defines `GUID_NULL`
+  to `__uuidof(struct GUID_NULL)`; if `cguid.h` is parsed afterwards its own
+  `extern const GUID GUID_NULL` expands into that macro and fails to compile *inside a
+  Windows SDK header*, so the error reads as an SDK bug rather than an include-order
+  one.
+- **`qedit.h` is gone from the modern SDK**, but `CLSID_SampleGrabber`
+  (`{C1F400A0-…}`) and `CLSID_NullRenderer` (`{C1F400A4-…}`) are still registered on
+  Windows 11. Redeclare `ISampleGrabber` / `ISampleGrabberCB` locally — the vtables and
+  IIDs are frozen by COM and cannot change.
 - MF virtual cameras are visible to **both** Media Foundation and DirectShow
   consumers, so one implementation covers Zoom, Teams, Discord, Chrome, OBS and the
   Windows Camera app.
@@ -129,13 +151,20 @@ their directories have content.
 backward map (`destToSource`) that the D3D11 pixel shader consumes: arbitrary-angle
 rotation, independent flips, three fit modes, zoom, pan, and coverage-preserving pan
 clamping. 12,101 assertions pass, including a 264-combination inverse round-trip
-sweep and a per-degree check that Fill never exposes an empty corner.
+sweep and a per-degree check that Fill never exposes an empty corner. Also builds and
+passes under MSVC, not only GCC.
 
-**Not started** — everything else. Nothing is committed to git yet.
+**Written and building, not yet verified against a live camera** — M1. `rc-vcam.dll`
+(MF media source), `rc-vcam-register.exe`, `rc-vcam-probe.exe` (MF *and* DirectShow),
+`rc-fakewriter.exe`, and the `Global\` frame ring in `windows/common/`. 111 assertions
+pass in `rcwin-common-tests`, including a threaded seqlock contention test. The
+end-to-end check needs an elevated `--register` and a hand pass over the consumer
+matrix; until that has been run, **do not describe M1 as working**.
 
-Next per milestone (see PLAN.md): **M0** walking skeleton and `rc-fakephone`, then
-**M1** the virtual camera, which is the highest-risk item in the project and must be
-prototyped before more is built on top of it.
+**Not started** — everything else.
+
+Next: finish M1's verification (see `windows/CLAUDE.md`), then **M0**'s walking
+skeleton and `rc-fakephone`.
 
 ## Two corrections already applied — PLAN.md's original text was wrong
 
