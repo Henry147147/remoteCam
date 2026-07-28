@@ -1,5 +1,15 @@
 # RemoteCam — Open-Source iVCam Replacement
 
+> **Status — 2026-07-28.** `core/` transform math is implemented and verified
+> (12,101 assertions passing). Everything else is unstarted; nothing is committed to
+> git yet. See [Status and handoff](#status-and-handoff) at the end of this document
+> for who owns what and where to pick up. Agent operating guide is in
+> [CLAUDE.md](CLAUDE.md).
+>
+> **Two errors in the original plan have been corrected in place** — the fit modes
+> in §2 and the pan clamping they imply. Both are described in
+> [Corrections](#corrections-to-the-original-plan).
+
 ## Context
 
 iVCam (e2eSoft) is the de-facto "phone as PC webcam" tool on Windows, and it is showing its age:
@@ -92,7 +102,7 @@ Critical implementation facts established during research:
 - Registration needs admin **once**, at install time via `rc-vcam-register.exe`. Never at app launch.
 - MF virtual cameras are visible to **both** Media Foundation and DirectShow consumers, so one implementation covers Zoom, Teams, Discord, Chrome, OBS and the Windows Camera app.
 
-**Frame handoff (`windows/core/sink/shm_writer.cpp` ↔ `windows/vcam/frame_reader.cpp`):**
+**Frame handoff (`windows/platform/sink/shm_writer.cpp` ↔ `windows/vcam/frame_reader.cpp`):**
 
 - Named section `Global\RemoteCam.Frames.0`, DACL granting read to `LOCAL SERVICE` and `ALL APPLICATION PACKAGES`.
 - Ring of 4 NV12 slots + header (`{magic, version, width, height, fps, format_generation, write_seq, slot_seq[4]}`).
@@ -113,9 +123,11 @@ srcUV = T(srcCenter) · S(1/zoom) · R(−θ) · F(flipX, flipY) · T(−dstCent
 ```
 
 - **Angle**: continuous −180°…+180°, 0.1° precision. ⟲/⟳ buttons snap 90°. Shift-drag snaps to 15°. `[` / `]` nudge ±1°, `Ctrl+[` / `]` step ±90°.
-- **Fit mode**: `Fit` (letterbox) · `Fill` (cover, crops) · `Stretch` · **`Auto-crop`** — computes the largest axis-aligned rectangle inscribed in the rotated source, so a 37° rotation has no black corners. This is the mode that makes odd angles actually usable.
+- **Fit mode** — three modes, not four. `Fit` (letterbox, whole source visible) · **`Fill`** (covers the canvas, crops the source, **no empty corners at any angle** — this is the mode that makes odd angles usable) · `Stretch` (non-uniform, fills the frame, ignores aspect).
+  - `Fill` is computed by projecting the *canvas* back into source space and requiring that rectangle to fit inside the source: `s = max((dstW·|cosθ| + dstH·|sinθ|)/srcW, (dstW·|sinθ| + dstH·|cosθ|)/srcH)`. **Not** by covering the source's rotated bounding box — see [Corrections](#corrections-to-the-original-plan).
+  - Implemented and tested in `core/src/transform.cpp`; the bound is proven tight by test.
 - **Flip H / Flip V** independent of angle.
-- **Pan + zoom** by dragging and scrolling directly on the preview — how you reframe after rotating.
+- **Pan + zoom** by dragging and scrolling directly on the preview — how you reframe after rotating. Clamp every drag with `rc::clampPanForCoverage` so `Fill` can never reveal a hard edge. **Do not clamp the two axes independently** — see [Corrections](#corrections-to-the-original-plan).
 - **Auto-rotate**: phone sends `UIDeviceOrientation` / `CMMotionManager` attitude on the control channel; drives the 90° component while the manual slider adds an offset on top. Lock toggle to ignore the phone entirely.
 - **Presets**: named transforms ("overhead desk cam", "vertical portrait", "sideways tripod").
 - **Sampling**: bilinear minimum, Catmull-Rom bicubic option — naive bilinear at non-90° angles looks noticeably soft.
@@ -230,7 +242,7 @@ Tray icon, run-at-login, minimize-to-tray, global hotkeys (rotate 90°, freeze, 
 |---|---|---|
 | **M0** | Walking skeleton: iOS capture → H.264 → TCP → decode → Qt preview, hardcoded IP. Plus `rc-fakephone`. Proves the latency budget on day one. | 2 wk |
 | **M1** | **Virtual camera**: MF media source DLL, Session 0 SHM handoff, registration helper, placeholder frames, `rc-vcam-probe`. Verified across the app matrix. *Highest risk — built second, not last.* | 2 wk |
-| **M2** | **Transform**: full rotation / auto-crop / pan / zoom / flip panel, auto-rotate, presets. The headline feature, demoable. | 1 wk |
+| **M2** | **Transform**: rotation / fit-mode / pan / zoom / flip panel, auto-rotate, presets. Math already done in `core/`; this is the shader plus the UI. | 1 wk |
 | **M3** | Bonjour discovery, pairing + QR, usbmux/USB, reconnect, adaptive bitrate. | 2 wk |
 | **M4** | Full iOS manual camera controls + lens switching + Windows-side UI. *(iVCam paywalls exactly this.)* | 1.5 wk |
 | **M5** | Effect chain: shader effects → ONNX/DirectML segmentation → Maxine VFX → Maxine AR eye contact. | 3 wk |
@@ -253,11 +265,108 @@ Project under **Apache-2.0**. Qt 6 is LGPLv3 → dynamic linking, ship Qt DLLs s
 
 ## Verification
 
-- `ctest` green in `windows/core/tests` — framing, transform-vs-CPU-reference PSNR, pairing vectors.
+- `ctest` green in `core/tests` — transform invariants (done), plus framing and pairing vectors when those land.
 - `rc-fakephone --file sample.mp4 --connect 127.0.0.1` drives the full Windows pipeline with no phone; preview renders, frame counter advances.
 - `rc-vcam-probe --mf` and `--directshow` both pull frames from the registered camera; SHA of a known test pattern matches.
 - Open **Zoom, Teams, Discord, Chrome/Meet, OBS, and Windows Camera** — RemoteCam appears in each picker and shows live video.
-- Rotate to 37° with auto-crop while streaming into Zoom — no black corners, no dropped frames, correct aspect.
+- Rotate to 37° in `Fill` mode while streaming into Zoom — no black corners, no dropped frames, correct aspect.
 - On an RTX machine: enable AI green screen + eye contact, confirm the diagnostics page shows Maxine active and end-to-end latency stays under budget. On an AMD/Intel machine: confirm the same effects run via DirectML and Maxine shows greyed with a reason.
 - Lock the iPhone screen mid-call — video keeps flowing (background capture).
 - Pull the Wi-Fi, restore it — automatic silent reconnect with no re-pairing.
+
+---
+
+## Status and handoff
+
+### Repository layout as built
+
+The plan originally put the portable core at `windows/core/`. **It lives at `core/`
+instead**, top-level and outside `windows/`. The transform math and wire protocol
+have no Windows dependency, and burying them under `windows/` would have made the
+trickiest logic in the project impossible to test without a Windows machine. The
+constraint is now enforced by rule in `core/CMakeLists.txt`: nothing in that target
+may reference D3D11, Media Foundation, Qt or WinRT.
+
+```
+core/          portable C++20 — transform math (done), protocol, pairing. Builds anywhere.
+windows/       Qt 6 client, MF virtual camera, OBS plugin, installer.   Windows agent.
+ios/           Swift 6 / SwiftUI capture app.                           Mac agent.
+docs/          protocol.md — normative wire spec.
+CLAUDE.md      agent operating guide; windows/ and ios/ have their own.
+```
+
+### Ownership
+
+| Agent | Owns | Builds | Cannot build |
+|---|---|---|---|
+| Linux | `core/`, `docs/`, `.github/` | `core/` + tests | anything platform-specific |
+| Windows | `windows/` | everything | `ios/` |
+| Mac | `ios/` | `ios/` | `windows/` |
+
+`core/` and `docs/protocol.md` are shared surfaces — changes there affect the other
+platform agent. Keep them small, commit them separately, and say so in the message.
+
+### Done
+
+**`core/` transform math**, implemented and verified: `rc::transform` produces the
+row-major 3×3 backward map (`destToSource`) that the D3D11 pixel shader consumes —
+arbitrary-angle rotation, independent flips, three fit modes, zoom, pan, and
+coverage-preserving pan clamping. 12,101 assertions pass, including a
+264-combination inverse round-trip sweep and a per-degree check that `Fill` never
+exposes an empty corner across five source aspect ratios.
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
+
+Also written: `docs/protocol.md` (draft, unimplemented), `README.md`, `.gitignore`,
+and CI that builds `core/` on all three runners with the platform jobs stubbed behind
+`if: false`.
+
+### Not done
+
+Everything else. **Nothing is committed to git yet.**
+
+### Where to pick up
+
+**Windows agent — M1, not M0.** The virtual camera is the highest-risk item in the
+project and everything else is built on top of it, so de-risk it first, in this
+order: a `rc-vcam.dll` emitting a static test pattern, verified by `rc-vcam-probe`
+through both MF and DirectShow → the `Global\` shared-memory ring proving the Session
+0 handoff → only then the real pipeline. If the handoff fails, escalate rather than
+working around it; the fallbacks are a frame-producing Windows service or
+`MFVirtualCameraAccess_CurrentUser`, and that choice reshapes the design.
+
+**Mac agent — M0.** Capture → `VTCompressionSession` → `NWConnection`, streaming to
+`rc-fakephone`'s counterpart or a scratch TCP sink, to establish the real capture and
+encode latency early. The protocol codec can follow.
+
+**Linux agent — M0/M3 core work.** Protocol framing codec and its round-trip tests,
+SPAKE2 pairing, the usbmux plist client, the adaptive-bitrate controller. All
+portable, all testable without hardware.
+
+### Corrections to the original plan
+
+Two errors in the first draft, both found by deriving and testing the math rather
+than by review. Fixed in §2 above; recorded here so nobody reintroduces them.
+
+**1. There were four fit modes; there are three.** The plan defined `Fill` as
+covering the source's *rotated bounding box*, and added a separate `Auto-crop` mode
+for the no-black-corners case. Bounding-box fill does not fill: a square source at
+45° scaled that way becomes a diamond whose bbox matches the canvas while the canvas
+corners stay empty. The correct cover formula is the one written up as `Auto-crop` —
+project the canvas back into source space. They are the same operation, so
+`Auto-crop` is gone and `Fill` uses that formula. **UI impact: three fit modes.**
+
+**2. Pan cannot be clamped per axis.** Pan is applied in canvas space *after*
+rotation, while the available slack is measured along *source* axes. At angles that
+are not multiples of 90° a canvas-space drag consumes slack on both source axes at
+once, so the permitted region is a rotated rectangle, not an axis-aligned box — there
+is no single "maximum panX" to return. `rc::panSlack` reports slack in source space
+and `rc::clampPanForCoverage` projects into source axes, clamps, and maps back. A
+per-axis clamp passes casual testing and leaks a black wedge at odd angles.
+
+**Convention fixed while implementing:** positive `rotationDeg` is **clockwise as
+displayed**, so the UI's "rotate right" button is +90. Rotation is applied about the
+source centre, in y-down image coordinates.

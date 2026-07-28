@@ -1,0 +1,28 @@
+build/
+build-*/
+cmake-build-*/
+.cache/
+compile_commands.json
+
+# Windows
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+.vs/
+out/
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
