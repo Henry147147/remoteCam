@@ -20,6 +20,18 @@ struct CameraDescriptor: Identifiable, Hashable, Sendable {
     let lens: CameraLens
 }
 
+struct CaptureFormatDescriptor: Hashable, Sendable {
+    let width: Int
+    let height: Int
+    let framesPerSecond: Int
+}
+
+struct CameraCapability: Identifiable, Hashable, Sendable {
+    let camera: CameraDescriptor
+    let formats: Set<CaptureFormatDescriptor>
+    var id: String { camera.id }
+}
+
 enum FocusMode: String, Codable, Sendable {
     case auto
     case locked
@@ -61,17 +73,21 @@ struct CameraControlState: Equatable, Sendable {
     var whiteBalanceKelvin: Double = 5_000
     var torchEnabled = false
     var torchAvailable = false
+    var stabilizationEnabled = true
 }
 
 struct CameraControlUpdate: Sendable {
-    var zoom: Double?
-    var focusMode: FocusMode?
-    var focus: Double?
-    var exposureMode: ExposureMode?
-    var iso: Double?
-    var exposureSeconds: Double?
-    var exposureBias: Double?
-    var whiteBalanceMode: WhiteBalanceMode?
-    var whiteBalanceKelvin: Double?
-    var torchEnabled: Bool?
+    var zoom: Double? = nil
+    var focusMode: FocusMode? = nil
+    var focus: Double? = nil
+    var exposureMode: ExposureMode? = nil
+    var iso: Double? = nil
+    var exposureSeconds: Double? = nil
+    var exposureBias: Double? = nil
+    var whiteBalanceMode: WhiteBalanceMode? = nil
+    var whiteBalanceKelvin: Double? = nil
+    var torchEnabled: Bool? = nil
+    var focusPointX: Double? = nil
+    var focusPointY: Double? = nil
+    var stabilizationEnabled: Bool? = nil
 }

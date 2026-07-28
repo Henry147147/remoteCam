@@ -14,6 +14,8 @@ project.root_object.attributes['LastUpgradeCheck'] = '2600'
 
 app = project.new_target(:application, 'RemoteCam', :ios, '17.0')
 tests = project.new_target(:unit_test_bundle, 'RemoteCamTests', :ios, '17.0')
+activity = project.new_target(:app_extension, 'RemoteCamActivity', :ios, '17.0')
+app.add_dependency(activity)
 
 sources_group = project.main_group.new_group('RemoteCam')
 Dir.glob(File.join(root, 'RemoteCam/Sources/**/*.swift')).sort.each do |path|
@@ -25,6 +27,15 @@ tests_group = project.main_group.new_group('RemoteCamTests')
 Dir.glob(File.join(root, 'RemoteCamTests/**/*.swift')).sort.each do |path|
   reference = tests_group.new_file(path.sub(root + '/', ''))
   tests.add_file_references([reference])
+end
+
+activity_group = project.main_group.new_group('RemoteCamActivity')
+activity_sources = Dir.glob(File.join(root, 'RemoteCamActivity/**/*.swift')).sort + [
+  File.join(root, 'RemoteCam/Sources/Activity/RemoteCamActivityAttributes.swift')
+]
+activity_sources.each do |path|
+  reference = activity_group.new_file(path.sub(root + '/', ''))
+  activity.add_file_references([reference])
 end
 
 # Keep protocol/storage tests independent of an application host. This makes the
@@ -62,6 +73,28 @@ tests.build_configurations.each do |config|
     'TARGETED_DEVICE_FAMILY' => '1,2'
   })
 end
+
+activity.build_configurations.each do |config|
+  config.build_settings.merge!({
+    'APPLICATION_EXTENSION_API_ONLY' => 'YES',
+    'CODE_SIGN_STYLE' => 'Automatic',
+    'CURRENT_PROJECT_VERSION' => '1',
+    'GENERATE_INFOPLIST_FILE' => 'NO',
+    'INFOPLIST_FILE' => 'RemoteCamActivity/Info.plist',
+    'IPHONEOS_DEPLOYMENT_TARGET' => '17.0',
+    'MARKETING_VERSION' => '1.0.0',
+    'PRODUCT_BUNDLE_IDENTIFIER' => 'org.remotecam.ios.activity',
+    'PRODUCT_NAME' => '$(TARGET_NAME)',
+    'SKIP_INSTALL' => 'YES',
+    'SWIFT_STRICT_CONCURRENCY' => 'complete',
+    'SWIFT_VERSION' => '6.0',
+    'TARGETED_DEVICE_FAMILY' => '1,2'
+  })
+end
+
+embed_extensions = app.new_copy_files_build_phase('Embed App Extensions')
+embed_extensions.dst_subfolder_spec = '13'
+embed_extensions.add_file_reference(activity.product_reference)
 
 project.save
 

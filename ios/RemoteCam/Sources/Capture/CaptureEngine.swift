@@ -42,6 +42,19 @@ actor CaptureEngine {
         Self.discoverDevices().map(Self.descriptor)
     }
 
+    func capabilities() -> [CameraCapability] {
+        Self.discoverDevices().map { device in
+            let formats = Set(device.formats.flatMap { format -> [CaptureFormatDescriptor] in
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                return [30, 60].compactMap { fps in
+                    guard format.videoSupportedFrameRateRanges.contains(where: { $0.maxFrameRate >= Double(fps) }) else { return nil }
+                    return CaptureFormatDescriptor(width: Int(dimensions.width), height: Int(dimensions.height), framesPerSecond: fps)
+                }
+            })
+            return CameraCapability(camera: Self.descriptor(device), formats: formats)
+        }
+    }
+
     func configure(_ configuration: StreamConfiguration, deviceID: String? = nil) throws -> CameraControlState {
         let devices = Self.discoverDevices()
         guard let device = devices.first(where: { $0.uniqueID == deviceID })
@@ -81,7 +94,7 @@ actor CaptureEngine {
         self.input = newInput
         selectedDevice = device
         self.configuration = configuration
-        return Self.controlState(for: device)
+        return controlStateForCurrentOutput(device)
     }
 
     func start() {
@@ -105,6 +118,14 @@ actor CaptureEngine {
 
         if let zoom = update.zoom {
             device.videoZoomFactor = min(max(CGFloat(zoom), device.minAvailableVideoZoomFactor), device.maxAvailableVideoZoomFactor)
+        }
+
+        if let x = update.focusPointX, let y = update.focusPointY {
+            let point = CGPoint(x: min(max(x, 0), 1), y: min(max(y, 0), 1))
+            if device.isFocusPointOfInterestSupported { device.focusPointOfInterest = point }
+            if device.isExposurePointOfInterestSupported { device.exposurePointOfInterest = point }
+            if device.isFocusModeSupported(.autoFocus) { device.focusMode = .autoFocus }
+            if device.isExposureModeSupported(.autoExpose) { device.exposureMode = .autoExpose }
         }
 
         if let focusMode = update.focusMode {
@@ -167,7 +188,14 @@ actor CaptureEngine {
             device.torchMode = torchEnabled ? .on : .off
         }
 
-        return Self.controlState(for: device)
+
+        if let stabilizationEnabled = update.stabilizationEnabled,
+           let connection = output.connection(with: .video),
+           connection.isVideoStabilizationSupported {
+            connection.preferredVideoStabilizationMode = stabilizationEnabled ? .auto : .off
+        }
+
+        return controlStateForCurrentOutput(device)
     }
 
     private static func discoverDevices() -> [AVCaptureDevice] {
@@ -279,6 +307,14 @@ actor CaptureEngine {
             torchEnabled: device.torchMode == .on,
             torchAvailable: device.hasTorch && device.isTorchAvailable
         )
+    }
+
+    private func controlStateForCurrentOutput(_ device: AVCaptureDevice) -> CameraControlState {
+        var state = Self.controlState(for: device)
+        if let mode = output.connection(with: .video)?.preferredVideoStabilizationMode {
+            state.stabilizationEnabled = mode != .off
+        }
+        return state
     }
 }
 

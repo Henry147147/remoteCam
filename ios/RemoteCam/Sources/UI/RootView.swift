@@ -4,6 +4,16 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
+        Group {
+            if isStreamingExperience {
+                StreamView()
+            } else {
+                discoveryView
+            }
+        }
+    }
+
+    private var discoveryView: some View {
         NavigationStack {
             List {
                 statusSection
@@ -26,6 +36,15 @@ struct RootView: View {
                 }
             }
             .task { model.start() }
+        }
+    }
+
+    private var isStreamingExperience: Bool {
+        switch model.connectionPhase {
+        case .ready, .streaming, .reconnecting:
+            true
+        default:
+            false
         }
     }
 

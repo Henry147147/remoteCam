@@ -16,6 +16,7 @@ final class CameraController: ObservableObject {
     @Published private(set) var interruptionMessage: String?
     @Published private(set) var errorMessage: String?
     @Published var previewEnabled = true
+    @Published private(set) var capabilities: [CameraCapability] = []
 
     private let engine: CaptureEngine
     private var observers: [NSObjectProtocol] = []
@@ -42,6 +43,7 @@ final class CameraController: ObservableObject {
         }
 
         cameras = await engine.availableCameras()
+        capabilities = await engine.capabilities()
         controls = try await engine.configure(configuration, deviceID: controls.deviceID)
         await engine.start()
         isRunning = true

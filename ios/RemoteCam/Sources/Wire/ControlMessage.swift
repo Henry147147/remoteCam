@@ -46,4 +46,65 @@ extension ControlMessage {
     static func streamStart() -> ControlMessage {
         ControlMessage(type: "stream_start")
     }
+
+    static func capabilities(_ capabilities: [CameraCapability]) -> ControlMessage {
+        let cameras = capabilities.map { capability in
+            CBORValue.map([
+                "id": .string(capability.camera.id),
+                "name": .string(capability.camera.name),
+                "position": .string(capability.camera.position.rawValue),
+                "lens": .string(capability.camera.lens.rawValue),
+                "formats": .array(capability.formats.sorted {
+                    ($0.width, $0.height, $0.framesPerSecond) < ($1.width, $1.height, $1.framesPerSecond)
+                }.map { format in
+                    .map([
+                        "width": .unsigned(UInt64(format.width)),
+                        "height": .unsigned(UInt64(format.height)),
+                        "fps": .unsigned(UInt64(format.framesPerSecond))
+                    ])
+                })
+            ])
+        }
+        return ControlMessage(type: "caps", fields: [
+            "cameras": .array(cameras),
+            "codecs": .array(VideoCodec.allCases.map { .string($0.rawValue) })
+        ])
+    }
+
+    static func cameraState(_ state: CameraControlState) -> ControlMessage {
+        ControlMessage(type: "camera_state", fields: [
+            "device_id": state.deviceID.map(CBORValue.string) ?? .null,
+            "position": .string(state.position.rawValue),
+            "lens": .string(state.lens.rawValue),
+            "zoom": .double(state.zoom),
+            "focus_mode": .string(state.focusMode.rawValue),
+            "focus": .double(state.focus),
+            "exposure_mode": .string(state.exposureMode.rawValue),
+            "iso": .double(state.iso),
+            "exposure": .double(state.exposureSeconds),
+            "ev": .double(state.exposureBias),
+            "wb_mode": .string(state.whiteBalanceMode.rawValue),
+            "wb": .double(state.whiteBalanceKelvin),
+            "torch": .boolean(state.torchEnabled),
+            "stabilization": .boolean(state.stabilizationEnabled)
+        ])
+    }
+
+    static func orientation(degrees: Double) -> ControlMessage {
+        ControlMessage(type: "orientation", fields: [
+            "deg": .double(degrees),
+            "locked": .boolean(false)
+        ])
+    }
+
+    static func thermal(_ state: String) -> ControlMessage {
+        ControlMessage(type: "thermal", fields: ["state": .string(state)])
+    }
+
+    static func battery(level: Double, charging: Bool) -> ControlMessage {
+        ControlMessage(type: "battery", fields: [
+            "level": .double(level),
+            "charging": .boolean(charging)
+        ])
+    }
 }

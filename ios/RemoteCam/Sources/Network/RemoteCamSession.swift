@@ -107,7 +107,13 @@ final class RemoteCamSession: ObservableObject {
     private var reconnectAttempt = 0
     private var reconnectTask: Task<Void, Never>?
     private var intentionalDisconnect = false
+    private var controlChannelAuthenticated = false
     private let deviceID = DeviceIdentity.loadOrCreate()
+#if DEBUG
+    private let allowsInsecureDevelopmentSession = ProcessInfo.processInfo.arguments.contains("--allow-insecure-session")
+#else
+    private let allowsInsecureDevelopmentSession = false
+#endif
 
     func connect(to host: RemoteHost, endpoint: NWEndpoint) {
         intentionalDisconnect = false
@@ -115,6 +121,7 @@ final class RemoteCamSession: ObservableObject {
         self.host = host
         self.endpoint = endpoint
         reconnectAttempt = 0
+        controlChannelAuthenticated = false
         updatePhase(.connecting(host))
         transport.connect(endpoint: endpoint)
     }
@@ -143,9 +150,9 @@ final class RemoteCamSession: ObservableObject {
         ))
     }
 
-    func markStreaming(configuration: StreamConfiguration) {
+    func markStreaming(configuration: StreamConfiguration, announceStart: Bool = true) {
         guard let host else { return }
-        sendControl(.streamStart())
+        if announceStart { sendControl(.streamStart()) }
         updatePhase(.streaming(host, configuration))
     }
 
@@ -177,6 +184,10 @@ final class RemoteCamSession: ObservableObject {
             case "pair_required":
                 if let host { updatePhase(.awaitingPairing(host)) }
             case "ready":
+                guard controlChannelAuthenticated || allowsInsecureDevelopmentSession else {
+                    updatePhase(.failed("The server tried to start an unauthenticated session. Secure pairing must complete first."))
+                    return
+                }
                 guard let configuration = Self.configuration(from: message), let host else { return }
                 updatePhase(.ready(host, configuration))
                 onReady?(configuration)
