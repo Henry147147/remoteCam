@@ -36,6 +36,8 @@ enum CBORError: Error, Equatable {
     case nestingLimitExceeded
     case trailingBytes
     case integerOverflow
+    case duplicateMapKey(String)
+    case collectionTooLarge
 }
 
 enum CBOREncoder {
@@ -118,6 +120,7 @@ enum CBORDecoder {
     }
 
     private struct Reader {
+        static let maximumCollectionElements = 100_000
         let data: Data
         var offset = 0
         var isAtEnd: Bool { offset == data.count }
@@ -143,18 +146,21 @@ enum CBORDecoder {
                 return .string(string)
             case 4:
                 let count = try integerCount(additional)
+                guard count <= Self.maximumCollectionElements else { throw CBORError.collectionTooLarge }
                 var values: [CBORValue] = []
                 values.reserveCapacity(count)
                 for _ in 0..<count { values.append(try readValue(depth: depth + 1)) }
                 return .array(values)
             case 5:
                 let count = try integerCount(additional)
+                guard count <= Self.maximumCollectionElements else { throw CBORError.collectionTooLarge }
                 var values: [String: CBORValue] = [:]
                 values.reserveCapacity(count)
                 for _ in 0..<count {
                     guard case .string(let key) = try readValue(depth: depth + 1) else {
                         throw CBORError.unsupportedMapKey
                     }
+                    guard values[key] == nil else { throw CBORError.duplicateMapKey(key) }
                     values[key] = try readValue(depth: depth + 1)
                 }
                 return .map(values)
@@ -163,6 +169,10 @@ enum CBORDecoder {
                 case 20: return .boolean(false)
                 case 21: return .boolean(true)
                 case 22: return .null
+                case 25:
+                    return .double(Double(Float16(bitPattern: try readInteger(UInt16.self))))
+                case 26:
+                    return .double(Double(Float(bitPattern: try readInteger(UInt32.self))))
                 case 27:
                     return .double(Double(bitPattern: try readInteger(UInt64.self)))
                 default:

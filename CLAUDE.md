@@ -165,7 +165,7 @@ matrix; until that has been run, **do not describe M1 as working**.
 contains Bonjour/manual/recent connections, framed TCP and deterministic CBOR,
 AVCapture multi-lens/manual controls, low-latency H.264/HEVC VideoToolbox encode,
 reconnect, telemetry, background multitasking setup, preview power saving, and a
-Live Activity. The simulator suite has 9 passing tests and one hardware-encoder
+Live Activity. The simulator suite has 12 passing tests and one hardware-encoder
 skip; Release compiles for the iPhoneOS SDK. A clean signed install is blocked by
 missing local provisioning and Developer Mode. Secure pairing, authenticated
 control/media encryption, and USB are blocked on the joint decisions listed in

@@ -17,9 +17,15 @@ private struct StreamContent: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if camera.previewEnabled {
-                CameraPreview(session: camera.session, enabled: camera.previewEnabled) { point in
-                    model.focus(at: point)
-                }
+                CameraPreview(
+                    session: camera.session,
+                    enabled: camera.previewEnabled,
+                    currentZoom: camera.controls.zoom,
+                    minimumZoom: camera.controls.minimumZoom,
+                    maximumZoom: camera.controls.maximumZoom,
+                    focus: model.focus,
+                    zoom: { model.applyCameraUpdate(CameraControlUpdate(zoom: $0)) }
+                )
                 .ignoresSafeArea()
             } else {
                 ContentUnavailableView(

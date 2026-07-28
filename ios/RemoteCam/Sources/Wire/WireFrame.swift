@@ -59,29 +59,39 @@ enum WireFrameError: Error, Equatable {
 
 struct WireFrameDecoder: Sendable {
     private var buffer = Data()
+    private var readOffset = 0
 
     mutating func append(_ bytes: Data) throws -> [WireFrame] {
         buffer.append(bytes)
         var frames: [WireFrame] = []
 
-        while buffer.count >= WireFrame.headerLength {
-            let payloadLength = Int(buffer.readBigEndian(UInt32.self, at: 0))
+        while buffer.count - readOffset >= WireFrame.headerLength {
+            let payloadLength = Int(buffer.readBigEndian(UInt32.self, at: readOffset))
             guard payloadLength <= WireFrame.maximumPayloadLength else { throw WireFrameError.payloadTooLarge }
-            let flags = WireFlags(rawValue: buffer[5])
+            let flags = WireFlags(rawValue: buffer[readOffset + 5])
             guard flags.rawValue & ~WireFlags.knownMask == 0 else { throw WireFrameError.reservedFlagsSet }
-            guard buffer[6] == 0, buffer[7] == 0 else { throw WireFrameError.reservedHeaderNonZero }
+            guard buffer[readOffset + 6] == 0, buffer[readOffset + 7] == 0 else { throw WireFrameError.reservedHeaderNonZero }
 
             let messageLength = WireFrame.headerLength + payloadLength
-            guard buffer.count >= messageLength else { break }
+            guard buffer.count - readOffset >= messageLength else { break }
+            let messageEnd = readOffset + messageLength
 
             let frame = WireFrame(
-                channel: buffer[4],
+                channel: buffer[readOffset + 4],
                 flags: flags,
-                presentationTimeMicros: buffer.readBigEndian(UInt64.self, at: 8),
-                payload: buffer.subdata(in: WireFrame.headerLength..<messageLength)
+                presentationTimeMicros: buffer.readBigEndian(UInt64.self, at: readOffset + 8),
+                payload: buffer.subdata(in: (readOffset + WireFrame.headerLength)..<messageEnd)
             )
             frames.append(frame)
-            buffer.removeSubrange(0..<messageLength)
+            readOffset = messageEnd
+        }
+
+        if readOffset == buffer.count {
+            buffer.removeAll(keepingCapacity: true)
+            readOffset = 0
+        } else if readOffset >= 1_024 * 1_024 || readOffset > buffer.count / 2 {
+            buffer.removeSubrange(0..<readOffset)
+            readOffset = 0
         }
 
         return frames

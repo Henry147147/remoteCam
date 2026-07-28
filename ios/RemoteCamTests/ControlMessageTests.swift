@@ -35,4 +35,10 @@ final class ControlMessageTests: XCTestCase {
         XCTAssertEqual(first["lens"], .string("wide"))
         XCTAssertEqual(formats.count, 2)
     }
+
+    func testRejectsOversizedControlPayload() {
+        XCTAssertThrowsError(try ControlMessage(payload: Data(repeating: 0, count: ControlMessage.maximumPayloadLength + 1))) { error in
+            XCTAssertEqual(error as? ControlMessageError, .payloadTooLarge)
+        }
+    }
 }

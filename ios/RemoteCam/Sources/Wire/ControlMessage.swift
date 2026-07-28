@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 
 struct ControlMessage: Equatable, Sendable {
+    static let maximumPayloadLength = 1_024 * 1_024
     let type: String
     var fields: [String: CBORValue]
 
@@ -11,6 +12,7 @@ struct ControlMessage: Equatable, Sendable {
     }
 
     init(payload: Data) throws {
+        guard payload.count <= Self.maximumPayloadLength else { throw ControlMessageError.payloadTooLarge }
         guard case .map(var map) = try CBORDecoder.decode(payload),
               let type = map.removeValue(forKey: "t")?.stringValue else {
             throw ControlMessageError.invalidMap
@@ -28,6 +30,7 @@ struct ControlMessage: Equatable, Sendable {
 
 enum ControlMessageError: Error, Equatable {
     case invalidMap
+    case payloadTooLarge
 }
 
 extension ControlMessage {

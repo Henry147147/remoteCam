@@ -24,7 +24,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DRC_BUILD_TESTS=ON
@@ -47,7 +47,7 @@ jobs:
     name: windows client
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure
         run: cmake -S . -B build -A x64 -DRC_BUILD_TESTS=ON
@@ -65,14 +65,23 @@ jobs:
     name: ios app
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build and test
         working-directory: ios
-        run: >-
-          xcodebuild
-          -project RemoteCam.xcodeproj
-          -scheme RemoteCam
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest'
-          CODE_SIGNING_ALLOWED=NO
-          test
+        run: |
+          SIMULATOR_ID="$({ xcrun simctl list devices available --json; } | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          candidates = [d for runtime in devices.values() for d in runtime
+                        if d.get("isAvailable") and d["name"].startswith("iPhone")]
+          if not candidates:
+              raise SystemExit("No available iPhone simulator")
+          print(candidates[0]["udid"])
+          ')"
+          xcodebuild \
+            -project RemoteCam.xcodeproj \
+            -scheme RemoteCam \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            CODE_SIGNING_ALLOWED=NO \
+            test

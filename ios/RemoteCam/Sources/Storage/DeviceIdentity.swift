@@ -4,11 +4,13 @@ import Security
 enum DeviceIdentity {
     private static let service = "org.remotecam.identity"
     private static let account = "device-id"
+    private static let fallbackDefaultsKey = "deviceIdentityFallback"
 
     static func loadOrCreate() -> String {
         if let existing = read() { return existing }
+        if let fallback = UserDefaults.standard.string(forKey: fallbackDefaultsKey) { return fallback }
         let id = (0..<8).map { _ in String(format: "%02x", UInt8.random(in: .min ... .max)) }.joined()
-        store(id)
+        if !store(id) { UserDefaults.standard.set(id, forKey: fallbackDefaultsKey) }
         return id
     }
 
@@ -26,7 +28,8 @@ enum DeviceIdentity {
         return String(data: data, encoding: .utf8)
     }
 
-    private static func store(_ value: String) {
+    @discardableResult
+    private static func store(_ value: String) -> Bool {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -36,6 +39,6 @@ enum DeviceIdentity {
         var item = base
         item[kSecValueData as String] = Data(value.utf8)
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(item as CFDictionary, nil)
+        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
     }
 }

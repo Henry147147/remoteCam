@@ -60,6 +60,7 @@ actor CaptureEngine {
     func configure(_ configuration: StreamConfiguration, deviceID: String? = nil) throws -> CameraControlState {
         let devices = Self.discoverDevices()
         guard let device = devices.first(where: { $0.uniqueID == deviceID })
+                ?? devices.first(where: { $0.position == .back && Self.isVirtualMultiLens($0.deviceType) })
                 ?? devices.first(where: { $0.position == .back && $0.deviceType == .builtInWideAngleCamera })
                 ?? devices.first else {
             throw CaptureEngineError.noCamera
@@ -209,6 +210,9 @@ actor CaptureEngine {
 
     private static func discoverDevices() -> [AVCaptureDevice] {
         let types: [AVCaptureDevice.DeviceType] = [
+            .builtInTripleCamera,
+            .builtInDualWideCamera,
+            .builtInDualCamera,
             .builtInUltraWideCamera,
             .builtInWideAngleCamera,
             .builtInTelephotoCamera,
@@ -218,7 +222,7 @@ actor CaptureEngine {
             deviceTypes: types,
             mediaType: .video,
             position: .unspecified
-        ).devices
+        ).devices.sorted { deviceRank($0) < deviceRank($1) }
     }
 
     private static func descriptor(_ device: AVCaptureDevice) -> CameraDescriptor {
@@ -233,11 +237,23 @@ actor CaptureEngine {
     private static func lens(for type: AVCaptureDevice.DeviceType) -> CameraLens {
         switch type {
         case .builtInUltraWideCamera: .ultraWide
-        case .builtInWideAngleCamera: .wide
+        case .builtInWideAngleCamera, .builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera: .wide
         case .builtInTelephotoCamera: .telephoto
         case .builtInTrueDepthCamera: .trueDepth
         default: .other
         }
+    }
+
+    private static func isVirtualMultiLens(_ type: AVCaptureDevice.DeviceType) -> Bool {
+        type == .builtInTripleCamera || type == .builtInDualWideCamera || type == .builtInDualCamera
+    }
+
+    private static func deviceRank(_ device: AVCaptureDevice) -> Int {
+        if device.position == .back, isVirtualMultiLens(device.deviceType) { return 0 }
+        if device.position == .back, device.deviceType == .builtInUltraWideCamera { return 1 }
+        if device.position == .back, device.deviceType == .builtInWideAngleCamera { return 2 }
+        if device.position == .back, device.deviceType == .builtInTelephotoCamera { return 3 }
+        return device.position == .front ? 10 : 9
     }
 
     private static func selectFormat(on device: AVCaptureDevice, configuration: StreamConfiguration) throws {

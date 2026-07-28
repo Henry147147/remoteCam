@@ -12,6 +12,8 @@ private final class RemoteCamTransport: @unchecked Sendable {
     private let queue = DispatchQueue(label: "org.remotecam.transport", qos: .userInteractive)
     private var connection: NWConnection?
     private var decoder = WireFrameDecoder()
+    private var pendingVideoBytes = 0
+    private let maximumPendingVideoBytes = 4 * 1_024 * 1_024
     private let event: @Sendable (TransportEvent) -> Void
 
     init(event: @escaping @Sendable (TransportEvent) -> Void) {
@@ -23,6 +25,7 @@ private final class RemoteCamTransport: @unchecked Sendable {
             guard let self else { return }
             self.connection?.cancel()
             self.decoder = WireFrameDecoder()
+            self.pendingVideoBytes = 0
             let tcp = NWProtocolTCP.Options()
             tcp.noDelay = true
             let parameters = NWParameters(tls: nil, tcp: tcp)
@@ -51,8 +54,18 @@ private final class RemoteCamTransport: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self, let connection = self.connection else { return }
             do {
-                connection.send(content: try frame.encoded(), completion: .contentProcessed { [weak self] error in
-                    if let error { self?.event(.failed(error.localizedDescription)) }
+                let content = try frame.encoded()
+                let isVideo = frame.channel == WireChannel.video.rawValue
+                if isVideo,
+                   !frame.flags.contains(.keyframe),
+                   self.pendingVideoBytes >= self.maximumPendingVideoBytes {
+                    return
+                }
+                if isVideo { self.pendingVideoBytes += content.count }
+                connection.send(content: content, completion: .contentProcessed { [weak self, weak connection] error in
+                    guard let self, let connection, connection === self.connection else { return }
+                    if isVideo { self.pendingVideoBytes = max(0, self.pendingVideoBytes - content.count) }
+                    if let error { self.event(.failed(error.localizedDescription)) }
                 })
             } catch {
                 self.event(.failed(error.localizedDescription))

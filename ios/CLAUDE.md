@@ -71,7 +71,7 @@ tap focus and manual controls, low-latency H.264/HEVC Annex-B encode, stats bitr
 orientation/battery/thermal reporting, PC-driven preview saving, diagnostics,
 multitasking capture setup, and Live Activity.
 
-The simulator suite reports 9 passing tests and one expected VideoToolbox skip; the
+The simulator suite reports 12 passing tests and one expected VideoToolbox skip; the
 Release target compiles for iPhoneOS. It has **not** run on a physical device: this
 Mac has no signed-in Xcode account/provisioning profile and the connected phone has
 Developer Mode disabled. Do not describe capture, encode, background operation, or

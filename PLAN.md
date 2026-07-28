@@ -6,7 +6,7 @@
 > frame ring and a stand-in producer, with 111 more assertions passing — but has not
 > yet been verified against a live camera. The **iOS capture client is written and
 > building** — capture, low-latency encoding, transport, controls, telemetry,
-> background setup, and Live Activity — with 9 simulator tests passing, but it has
+> background setup, and Live Activity — with 12 simulator tests passing, but it has
 > not run on hardware or against a Windows receiver. See
 > [Status and handoff](#status-and-handoff) at the end of this document for who owns
 > what and where to pick up. Agent operating guide is in [CLAUDE.md](CLAUDE.md).
@@ -347,7 +347,7 @@ CBOR, reconnect, multi-lens AVCapture, tap focus and manual camera controls,
 VideoToolbox H.264/HEVC with parameter sets on every keyframe, ABR updates,
 orientation/battery/thermal telemetry, background multitasking setup, preview power
 saving, diagnostics, and a visible Live Activity. Release compiles for iPhoneOS and
-the simulator suite passes 9 tests with the hardware-encoder test skipped where no
+the simulator suite passes 12 tests with the hardware-encoder test skipped where no
 encoder exists. It has not been installed/run on an iPhone or streamed to Windows.
 The integration contract and blockers are in `docs/ios-backend-handoff.md`.
 

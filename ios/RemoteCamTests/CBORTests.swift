@@ -23,4 +23,17 @@ final class CBORTests: XCTestCase {
             XCTAssertEqual(error as? CBORError, .trailingBytes)
         }
     }
+
+    func testDecodesFloat16AndFloat32() throws {
+        XCTAssertEqual(try CBORDecoder.decode(Data([0xf9, 0x3e, 0x00])), .double(1.5))
+        XCTAssertEqual(try CBORDecoder.decode(Data([0xfa, 0x42, 0x48, 0x00, 0x00])), .double(50.0))
+    }
+
+    func testRejectsDuplicateMapKeys() {
+        // {"t": 1, "t": 2} is ambiguous and cannot be safely authenticated.
+        let duplicate = Data([0xa2, 0x61, 0x74, 0x01, 0x61, 0x74, 0x02])
+        XCTAssertThrowsError(try CBORDecoder.decode(duplicate)) { error in
+            XCTAssertEqual(error as? CBORError, .duplicateMapKey("t"))
+        }
+    }
 }

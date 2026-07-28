@@ -22,7 +22,7 @@ struct CameraControlsView: View {
         Section("Lens") {
             Picker("Camera", selection: deviceBinding) {
                 ForEach(camera.cameras) { descriptor in
-                    Text("\(descriptor.position.rawValue.capitalized) · \(descriptor.lens.rawValue)")
+                    Text(descriptor.name)
                         .tag(descriptor.id)
                 }
             }
