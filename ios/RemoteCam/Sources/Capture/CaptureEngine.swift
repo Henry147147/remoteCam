@@ -1,0 +1,299 @@
+@preconcurrency import AVFoundation
+import Foundation
+
+enum CaptureEngineError: LocalizedError {
+    case noCamera
+    case cannotAddInput
+    case cannotAddOutput
+    case unsupportedFormat(width: Int, height: Int, fps: Int)
+    case configurationFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noCamera:
+            "No compatible camera is available."
+        case .cannotAddInput:
+            "The camera input could not be added to the capture session."
+        case .cannotAddOutput:
+            "The video output could not be added to the capture session."
+        case .unsupportedFormat(let width, let height, let fps):
+            "This camera does not support \(width)×\(height) at \(fps) fps."
+        case .configurationFailed(let message):
+            message
+        }
+    }
+}
+
+actor CaptureEngine {
+    nonisolated(unsafe) let session = AVCaptureSession()
+
+    private let output = AVCaptureVideoDataOutput()
+    private let outputQueue = DispatchQueue(label: "org.remotecam.capture.output", qos: .userInteractive)
+    private let delegate: SampleBufferRelay
+    private var input: AVCaptureDeviceInput?
+    private var selectedDevice: AVCaptureDevice?
+    private var configuration: StreamConfiguration = .default1080p
+
+    init(sampleHandler: @escaping @Sendable (CMSampleBuffer) -> Void) {
+        delegate = SampleBufferRelay(handler: sampleHandler)
+    }
+
+    func availableCameras() -> [CameraDescriptor] {
+        Self.discoverDevices().map(Self.descriptor)
+    }
+
+    func configure(_ configuration: StreamConfiguration, deviceID: String? = nil) throws -> CameraControlState {
+        let devices = Self.discoverDevices()
+        guard let device = devices.first(where: { $0.uniqueID == deviceID })
+                ?? devices.first(where: { $0.position == .back && $0.deviceType == .builtInWideAngleCamera })
+                ?? devices.first else {
+            throw CaptureEngineError.noCamera
+        }
+
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
+
+        if let input { session.removeInput(input) }
+        let newInput = try AVCaptureDeviceInput(device: device)
+        guard session.canAddInput(newInput) else { throw CaptureEngineError.cannotAddInput }
+        session.addInput(newInput)
+
+        if !session.outputs.contains(output) {
+            guard session.canAddOutput(output) else { throw CaptureEngineError.cannotAddOutput }
+            output.alwaysDiscardsLateVideoFrames = true
+            output.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+            ]
+            output.setSampleBufferDelegate(delegate, queue: outputQueue)
+            session.addOutput(output)
+        }
+
+        try Self.selectFormat(on: device, configuration: configuration)
+        if let connection = output.connection(with: .video), connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false
+            connection.isVideoMirrored = false
+        }
+
+        if session.isMultitaskingCameraAccessSupported {
+            session.isMultitaskingCameraAccessEnabled = true
+        }
+
+        self.input = newInput
+        selectedDevice = device
+        self.configuration = configuration
+        return Self.controlState(for: device)
+    }
+
+    func start() {
+        guard !session.isRunning else { return }
+        session.startRunning()
+    }
+
+    func stop() {
+        guard session.isRunning else { return }
+        session.stopRunning()
+    }
+
+    func switchCamera(deviceID: String) throws -> CameraControlState {
+        try configure(configuration, deviceID: deviceID)
+    }
+
+    func apply(_ update: CameraControlUpdate) throws -> CameraControlState {
+        guard let device = selectedDevice else { throw CaptureEngineError.noCamera }
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+
+        if let zoom = update.zoom {
+            device.videoZoomFactor = min(max(CGFloat(zoom), device.minAvailableVideoZoomFactor), device.maxAvailableVideoZoomFactor)
+        }
+
+        if let focusMode = update.focusMode {
+            switch focusMode {
+            case .auto where device.isFocusModeSupported(.continuousAutoFocus):
+                device.focusMode = .continuousAutoFocus
+            case .locked where device.isFocusModeSupported(.locked):
+                device.focusMode = .locked
+            case .manual where device.isLockingFocusWithCustomLensPositionSupported:
+                device.setFocusModeLocked(lensPosition: Float(update.focus ?? Double(device.lensPosition)))
+            default:
+                break
+            }
+        } else if let focus = update.focus, device.isLockingFocusWithCustomLensPositionSupported {
+            device.setFocusModeLocked(lensPosition: Float(min(max(focus, 0), 1)))
+        }
+
+        if let exposureMode = update.exposureMode {
+            switch exposureMode {
+            case .auto where device.isExposureModeSupported(.continuousAutoExposure):
+                device.exposureMode = .continuousAutoExposure
+            case .locked where device.isExposureModeSupported(.locked):
+                device.exposureMode = .locked
+            case .manual where device.isExposureModeSupported(.custom):
+                let duration = Self.clampedDuration(update.exposureSeconds, for: device)
+                let iso = Self.clampedISO(update.iso, for: device)
+                device.setExposureModeCustom(duration: duration, iso: iso)
+            default:
+                break
+            }
+        } else if update.iso != nil || update.exposureSeconds != nil, device.isExposureModeSupported(.custom) {
+            device.setExposureModeCustom(
+                duration: Self.clampedDuration(update.exposureSeconds, for: device),
+                iso: Self.clampedISO(update.iso, for: device)
+            )
+        }
+
+        if let bias = update.exposureBias {
+            device.setExposureTargetBias(min(max(Float(bias), device.minExposureTargetBias), device.maxExposureTargetBias))
+        }
+
+        if let whiteBalanceMode = update.whiteBalanceMode {
+            switch whiteBalanceMode {
+            case .auto where device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance):
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            case .locked where device.isWhiteBalanceModeSupported(.locked):
+                device.whiteBalanceMode = .locked
+            case .manual where device.isLockingWhiteBalanceWithCustomDeviceGainsSupported:
+                let gains = Self.whiteBalanceGains(kelvin: update.whiteBalanceKelvin ?? 5_000, device: device)
+                device.setWhiteBalanceModeLocked(with: gains)
+            default:
+                break
+            }
+        } else if let kelvin = update.whiteBalanceKelvin,
+                  device.isLockingWhiteBalanceWithCustomDeviceGainsSupported {
+            device.setWhiteBalanceModeLocked(with: Self.whiteBalanceGains(kelvin: kelvin, device: device))
+        }
+
+        if let torchEnabled = update.torchEnabled, device.hasTorch, device.isTorchAvailable {
+            device.torchMode = torchEnabled ? .on : .off
+        }
+
+        return Self.controlState(for: device)
+    }
+
+    private static func discoverDevices() -> [AVCaptureDevice] {
+        let types: [AVCaptureDevice.DeviceType] = [
+            .builtInUltraWideCamera,
+            .builtInWideAngleCamera,
+            .builtInTelephotoCamera,
+            .builtInTrueDepthCamera
+        ]
+        return AVCaptureDevice.DiscoverySession(
+            deviceTypes: types,
+            mediaType: .video,
+            position: .unspecified
+        ).devices
+    }
+
+    private static func descriptor(_ device: AVCaptureDevice) -> CameraDescriptor {
+        CameraDescriptor(
+            id: device.uniqueID,
+            name: device.localizedName,
+            position: device.position == .front ? .front : .back,
+            lens: lens(for: device.deviceType)
+        )
+    }
+
+    private static func lens(for type: AVCaptureDevice.DeviceType) -> CameraLens {
+        switch type {
+        case .builtInUltraWideCamera: .ultraWide
+        case .builtInWideAngleCamera: .wide
+        case .builtInTelephotoCamera: .telephoto
+        case .builtInTrueDepthCamera: .trueDepth
+        default: .other
+        }
+    }
+
+    private static func selectFormat(on device: AVCaptureDevice, configuration: StreamConfiguration) throws {
+        let candidates = device.formats.compactMap { format -> (AVCaptureDevice.Format, Int, Int)? in
+            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            guard dimensions.width == configuration.width,
+                  dimensions.height == configuration.height,
+                  format.videoSupportedFrameRateRanges.contains(where: { $0.maxFrameRate >= Double(configuration.framesPerSecond) }) else {
+                return nil
+            }
+            return (format, Int(dimensions.width), Int(dimensions.height))
+        }
+        guard let format = candidates.first?.0 else {
+            throw CaptureEngineError.unsupportedFormat(
+                width: configuration.width,
+                height: configuration.height,
+                fps: configuration.framesPerSecond
+            )
+        }
+
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+        device.activeFormat = format
+        let duration = CMTime(value: 1, timescale: CMTimeScale(configuration.framesPerSecond))
+        device.activeVideoMinFrameDuration = duration
+        device.activeVideoMaxFrameDuration = duration
+    }
+
+    private static func clampedDuration(_ seconds: Double?, for device: AVCaptureDevice) -> CMTime {
+        guard let seconds else { return device.exposureDuration }
+        let requested = CMTime(seconds: seconds, preferredTimescale: 1_000_000_000)
+        return CMTimeMaximum(device.activeFormat.minExposureDuration, CMTimeMinimum(requested, device.activeFormat.maxExposureDuration))
+    }
+
+    private static func clampedISO(_ iso: Double?, for device: AVCaptureDevice) -> Float {
+        guard let iso else { return device.iso }
+        return min(max(Float(iso), device.activeFormat.minISO), device.activeFormat.maxISO)
+    }
+
+    private static func whiteBalanceGains(kelvin: Double, device: AVCaptureDevice) -> AVCaptureDevice.WhiteBalanceGains {
+        let values = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
+            temperature: Float(min(max(kelvin, 2_000), 10_000)),
+            tint: 0
+        )
+        var gains = device.deviceWhiteBalanceGains(for: values)
+        let maximum = device.maxWhiteBalanceGain
+        gains.redGain = min(max(gains.redGain, 1), maximum)
+        gains.greenGain = min(max(gains.greenGain, 1), maximum)
+        gains.blueGain = min(max(gains.blueGain, 1), maximum)
+        return gains
+    }
+
+    private static func controlState(for device: AVCaptureDevice) -> CameraControlState {
+        let temperature = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains).temperature
+        return CameraControlState(
+            deviceID: device.uniqueID,
+            position: device.position == .front ? .front : .back,
+            lens: lens(for: device.deviceType),
+            zoom: Double(device.videoZoomFactor),
+            minimumZoom: Double(device.minAvailableVideoZoomFactor),
+            maximumZoom: Double(min(device.maxAvailableVideoZoomFactor, 20)),
+            focusMode: device.focusMode == .locked ? .locked : .auto,
+            focus: Double(device.lensPosition),
+            exposureMode: device.exposureMode == .custom ? .manual : (device.exposureMode == .locked ? .locked : .auto),
+            iso: Double(device.iso),
+            minimumISO: Double(device.activeFormat.minISO),
+            maximumISO: Double(device.activeFormat.maxISO),
+            exposureSeconds: CMTimeGetSeconds(device.exposureDuration),
+            minimumExposureSeconds: CMTimeGetSeconds(device.activeFormat.minExposureDuration),
+            maximumExposureSeconds: CMTimeGetSeconds(device.activeFormat.maxExposureDuration),
+            exposureBias: Double(device.exposureTargetBias),
+            minimumExposureBias: Double(device.minExposureTargetBias),
+            maximumExposureBias: Double(device.maxExposureTargetBias),
+            whiteBalanceMode: device.whiteBalanceMode == .locked ? .locked : .auto,
+            whiteBalanceKelvin: Double(temperature),
+            torchEnabled: device.torchMode == .on,
+            torchAvailable: device.hasTorch && device.isTorchAvailable
+        )
+    }
+}
+
+private final class SampleBufferRelay: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+    let handler: @Sendable (CMSampleBuffer) -> Void
+
+    init(handler: @escaping @Sendable (CMSampleBuffer) -> Void) {
+        self.handler = handler
+    }
+
+    func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        handler(sampleBuffer)
+    }
+}

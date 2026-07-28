@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "745C60EBF8205336C05DF9DF"
+               BlueprintIdentifier = "BAE2C5E566DF52D5DAF7800E"
                BuildableName = "RemoteCam.app"
                BlueprintName = "RemoteCam"
                ReferencedContainer = "container:RemoteCam.xcodeproj">
@@ -32,7 +32,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "57FFBDE26347785C0EDCDB37"
+               BlueprintIdentifier = "0C64577363D4F07CAD5BF50F"
                BuildableName = "RemoteCamTests.xctest"
                BlueprintName = "RemoteCamTests"
                ReferencedContainer = "container:RemoteCam.xcodeproj">

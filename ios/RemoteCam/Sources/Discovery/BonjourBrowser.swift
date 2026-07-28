@@ -8,6 +8,7 @@ final class BonjourBrowser: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private var browser: NWBrowser?
+    private var endpointsByID: [String: NWEndpoint] = [:]
     private let queue = DispatchQueue(label: "org.remotecam.discovery")
 
     func start() {
@@ -21,9 +22,10 @@ final class BonjourBrowser: ObservableObject {
             Task { @MainActor in self?.handle(state) }
         }
         browser.browseResultsChangedHandler = { [weak self] results, _ in
-            let parsed = results.compactMap(Self.parse)
+            let parsed = results.compactMap { result in Self.parse(result).map { ($0, result.endpoint) } }
             Task { @MainActor in
-                self?.hosts = parsed.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                self?.endpointsByID = Dictionary(uniqueKeysWithValues: parsed.map { ($0.0.id, $0.1) })
+                self?.hosts = parsed.map(\.0).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             }
         }
         isSearching = true
@@ -34,6 +36,10 @@ final class BonjourBrowser: ObservableObject {
         browser?.cancel()
         browser = nil
         isSearching = false
+    }
+
+    func endpoint(for host: RemoteHost) -> NWEndpoint? {
+        endpointsByID[host.id]
     }
 
     private func handle(_ state: NWBrowser.State) {
