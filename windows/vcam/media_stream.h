@@ -24,6 +24,12 @@
 
 namespace rcvcam {
 
+// Ceiling on outstanding RequestSample calls. Eight is a quarter-second of buffering at
+// the advertised rate -- deep enough for a consumer that primes a pipeline with several
+// requests up front, shallow enough that a runaway one cannot grow the Frame Server's
+// working set.
+inline constexpr size_t kMaxPendingRequests = 8;
+
 class MediaStream final : public IMFMediaStream2 {
  public:
   static HRESULT Create(IMFMediaSource* source, IMFStreamDescriptor* descriptor,
@@ -67,6 +73,7 @@ class MediaStream final : public IMFMediaStream2 {
   long refCount_ = 1;
   bool shutdown_ = false;
   bool running_ = false;
+  bool requestOverflowLogged_ = false;
 
   Microsoft::WRL::ComPtr<IMFMediaEventQueue> eventQueue_;
   Microsoft::WRL::ComPtr<IMFStreamDescriptor> descriptor_;

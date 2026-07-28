@@ -4,6 +4,10 @@ Owns `windows/`. Read the root [CLAUDE.md](../CLAUDE.md) first — the locked
 decisions and the "do not re-derive" facts there are load-bearing, especially the
 Session 0 and `HKCR` gotchas.
 
+[API-NOTES.md](API-NOTES.md) records the non-obvious contracts inside `windows/` and
+the changes that are known to be needed but deliberately deferred. Read it before
+changing anything in `windows/common/` — more than one component consumes it now.
+
 ## Toolchain
 
 Windows 11 build 22000+, MSVC (VS 2022 or newer), CMake ≥ 3.21, Qt 6, Windows SDK

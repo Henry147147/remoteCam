@@ -47,6 +47,14 @@ HRESULT MediaSource::CreateInstance(REFIID riid, void** ppv) {
 
   HRESULT hr = source->Initialize();
   if (SUCCEEDED(hr)) hr = source->QueryInterface(riid, ppv);
+
+  // Initialize may have got as far as building the stream, which takes a strong
+  // reference back to this source -- the deliberate cycle documented in media_stream.h.
+  // On a later failure, Release() alone would drop the count to one and leave both
+  // objects alive for the lifetime of the Frame Server process. Shutdown breaks the
+  // cycle, and is harmless if Initialize failed before the stream existed.
+  if (FAILED(hr)) source->Shutdown();
+
   source->Release();
   return hr;
 }

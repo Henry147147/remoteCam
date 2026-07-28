@@ -153,6 +153,21 @@ IFACEMETHODIMP MediaStream::RequestSample(IUnknown* token) {
   RC_RETURN_HR_IF(shutdown_, MF_E_SHUTDOWN);
   RC_RETURN_HR_IF(!running_, MF_E_INVALIDREQUEST);
 
+  // Bounded deliberately. Nothing stops a consumer calling RequestSample faster than
+  // the advertised frame rate, and an unbounded queue would then grow without limit
+  // inside svchost.exe -- memory growth in a shared service, driven by an external
+  // caller. Dropping the oldest pending request costs that consumer one frame; not
+  // dropping it eventually costs the machine its camera service.
+  if (tokens_.size() >= kMaxPendingRequests) {
+    tokens_.pop_front();
+    if (!requestOverflowLogged_) {
+      requestOverflowLogged_ = true;
+      RC_WARN(L"consumer is requesting samples faster than %u/%u fps; capping the pending "
+              L"queue at %zu and dropping the oldest",
+              kFpsNumerator, kFpsDenominator, kMaxPendingRequests);
+    }
+  }
+
   // A null token is legal and common; it still has to occupy a slot so that requests
   // and delivered samples stay one-to-one.
   tokens_.emplace_back(token);
@@ -190,6 +205,7 @@ HRESULT MediaStream::Start() {
     if (running_) return S_OK;
     running_ = true;
     tokens_.clear();
+    requestOverflowLogged_ = false;  // warn once per streaming session, not once ever
   }
 
   ::ResetEvent(stopEvent_);

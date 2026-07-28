@@ -149,7 +149,11 @@ void renderPattern(uint8_t* dst, const Nv12Layout& layout, uint64_t frameIndex,
     nv12FillRect(dst, layout, x, r.staticTop, w, r.staticHeight, kBars[i]);
   }
 
-  const int labelScale = layout.height >= 720 ? 4 : 2;
+  // Shrink until the label fits. At 320 px wide the 4x scale overflows the frame and
+  // nv12FillRect would silently clip both ends, leaving text that reads as corruption
+  // rather than as a label -- which is the opposite of what a diagnostic frame is for.
+  int labelScale = layout.height >= 720 ? 4 : 2;
+  while (labelScale > 1 && textWidth(label, labelScale) > layout.width) --labelScale;
   const int labelBoxH = kGlyphH * labelScale + 12 * labelScale / 2;
   const int labelBoxY = r.staticTop + r.staticHeight / 2 - labelBoxH / 2;
   nv12FillRect(dst, layout, 0, labelBoxY, layout.width, labelBoxH, bg);

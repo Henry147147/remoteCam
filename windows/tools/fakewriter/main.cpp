@@ -96,9 +96,33 @@ int wmain(int argc, wchar_t** argv) {
   std::wprintf(L"rc-fakewriter: %dx%d @ %d fps\n", layout.width, layout.height, fps);
   std::wprintf(L"Waiting for a consumer to open the RemoteCam camera...\n");
 
+  // Paced with a high-resolution waitable timer against an absolute origin, the same
+  // way rc-vcam.dll paces its own output.
+  //
+  // Sleep(1000/fps) would have been shorter, and wrong twice over: the default timer
+  // granularity is ~15.6 ms, so a requested 33 ms sleep actually lands nearer 47 ms
+  // (~21 fps), and the error accumulates because each sleep is relative to when the
+  // last one happened to wake. A tool whose entire job is to demonstrate that frames
+  // flow across the session boundary must not itself be the reason they look late.
+  HANDLE timer = ::CreateWaitableTimerExW(nullptr, nullptr,
+                                          CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                          TIMER_ALL_ACCESS);
+  if (!timer) timer = ::CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+  if (!timer) {
+    std::wprintf(L"CreateWaitableTimerEx failed: %s\n",
+                 rcwin::hrMessage(rcwin::hrFromLastError()).c_str());
+    return 1;
+  }
+
+  const LONGLONG intervalTicks = 10000000LL / fps;  // 100 ns units
+  LARGE_INTEGER originQpc{};
+  ::QueryPerformanceCounter(&originQpc);
+  LARGE_INTEGER qpcFreq{};
+  ::QueryPerformanceFrequency(&qpcFreq);
+
   bool announced = false;
   uint64_t frameIndex = 0;
-  const DWORD intervalMs = static_cast<DWORD>(1000 / fps);
+  uint64_t tick = 0;
 
   while (!g_stop) {
     if (!ring.valid()) {
@@ -114,6 +138,11 @@ int wmain(int argc, wchar_t** argv) {
       }
       std::wprintf(L"Ring opened. Publishing frames.\n");
       announced = true;
+      // Restart the schedule from here. The ring can be closed for minutes while nobody
+      // has the camera open; carrying the old origin across that gap would leave the
+      // timer owing hundreds of frames and publish them back-to-back on reconnect.
+      ::QueryPerformanceCounter(&originQpc);
+      tick = 0;
     }
 
     rcwin::renderPattern(frame.data(), layout, frameIndex, rcwin::PatternStyle::Writer);
@@ -141,9 +170,23 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (limit > 0 && static_cast<long long>(frameIndex) >= limit) break;
 
-    ::Sleep(intervalMs);
+    // Scheduled from a fixed origin rather than "now + interval", so a late wake-up
+    // does not push every subsequent frame later.
+    ++tick;
+    LARGE_INTEGER now{};
+    ::QueryPerformanceCounter(&now);
+    const LONGLONG elapsed100ns =
+        (now.QuadPart - originQpc.QuadPart) * 10000000LL / qpcFreq.QuadPart;
+    LONGLONG delta = static_cast<LONGLONG>(tick) * intervalTicks - elapsed100ns;
+    if (delta < 0) delta = 0;
+
+    LARGE_INTEGER due;
+    due.QuadPart = -delta;  // negative == relative
+    if (!::SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) break;
+    if (::WaitForSingleObject(timer, INFINITE) != WAIT_OBJECT_0) break;
   }
 
+  ::CloseHandle(timer);
   std::wprintf(L"Stopped after %llu frames.\n", static_cast<unsigned long long>(frameIndex));
   return 0;
 }

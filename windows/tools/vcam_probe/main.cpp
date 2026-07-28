@@ -325,7 +325,12 @@ class GrabberCallback final : public ISampleGrabberCB {
     // DirectShow reports seconds as a double; the rest of this tool works in 100 ns
     // units, so convert here rather than special-casing the report.
     stat.timestamp100ns = static_cast<long long>(sampleTime * 10000000.0);
-    if (nv12_ && width_ > 0 && height_ > 0) {
+    // The length is checked against the geometry the graph reported rather than
+    // assumed to agree with it. analyse() indexes rows by that geometry, so a short
+    // buffer from a misdescribing filter would read past the end of somebody else's
+    // allocation -- and this tool exists to diagnose faults, not to add one.
+    const long needed = static_cast<long>(width_) * height_ * 3 / 2;
+    if (nv12_ && width_ > 0 && height_ > 0 && length >= needed) {
       analyse(buffer, width_, width_, height_, stat);
     }
     writeRaw(outDir_, frames_.size(), buffer, static_cast<size_t>(length));
