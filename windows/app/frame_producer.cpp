@@ -3,6 +3,7 @@
 #include <QMetaObject>
 #include <cstdint>
 #include <limits>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -19,6 +20,7 @@ constexpr int kOutputHeight = 1080;
 constexpr int kOutputFps = 30;
 constexpr DWORD kConsumerPollMillis = 250;
 constexpr HRESULT kRingNotFound = HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+constexpr HRESULT kRingBusy = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
 
 // M1 advertises exactly this geometry. Keep these assertions beside the
 // producer so a later UI edit cannot silently publish a format that FrameSource
@@ -37,6 +39,12 @@ QString hresultDetail(const wchar_t* operation, HRESULT hr) {
 
 bool waitOrStop(HANDLE stopEvent, DWORD milliseconds) {
   return ::WaitForSingleObject(stopEvent, milliseconds) == WAIT_OBJECT_0;
+}
+
+LONGLONG qpcTo100ns(LONGLONG ticks, LONGLONG frequency) {
+  const LONGLONG wholeSeconds = ticks / frequency;
+  const LONGLONG remainder = ticks % frequency;
+  return wholeSeconds * 10000000LL + remainder * 10000000LL / frequency;
 }
 
 }  // namespace
@@ -68,13 +76,24 @@ QString FrameProducer::connectionLabel() const {
 void FrameProducer::start() {
   if (worker_.joinable() || connectionState_ == ConnectionState::ProducerConflict) return;
 
+  if (stopEvent_) {
+    ::CloseHandle(stopEvent_);
+    stopEvent_ = nullptr;
+  }
   stopEvent_ = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
   if (!stopEvent_) {
     setStartupFailure(hresultDetail(L"CreateEventW", rcwin::hrFromLastError()));
     return;
   }
 
-  worker_ = std::jthread([this](std::stop_token stopToken) { run(stopToken); });
+  try {
+    worker_ = std::jthread([this](std::stop_token stopToken) { run(stopToken); });
+  } catch (const std::system_error& error) {
+    ::CloseHandle(stopEvent_);
+    stopEvent_ = nullptr;
+    setStartupFailure(QStringLiteral("Could not start the producer worker: %1")
+                          .arg(QString::fromLocal8Bit(error.what())));
+  }
 }
 
 void FrameProducer::stop() {
@@ -82,6 +101,8 @@ void FrameProducer::stop() {
   worker_.request_stop();
   if (stopEvent_) ::SetEvent(stopEvent_);
   worker_.join();
+  ::CloseHandle(stopEvent_);
+  stopEvent_ = nullptr;
 }
 
 void FrameProducer::setProducerConflict() {
@@ -184,7 +205,13 @@ void FrameProducer::run(std::stop_token stopToken) {
 
       // A consumer can be absent for minutes. Re-anchor every successful open
       // so none of those missed 30 Hz ticks is replayed as a catch-up burst.
-      ::QueryPerformanceCounter(&pacingOrigin);
+      if (!::QueryPerformanceCounter(&pacingOrigin)) {
+        const HRESULT hr = rcwin::hrFromLastError();
+        RC_ERR(L"QueryPerformanceCounter failed: %s", rcwin::hrMessage(hr).c_str());
+        postState(ConnectionState::ActualFailure,
+                  hresultDetail(L"QueryPerformanceCounter", hr));
+        break;
+      }
       pacingTick = 0;
       transition(ConnectionState::ConnectedPublishing,
                  QStringLiteral("Publishing fixed NV12 1920 x 1080 video at 30 fps."),
@@ -204,29 +231,45 @@ void FrameProducer::run(std::stop_token stopToken) {
     const HRESULT writeHr =
         ring.writeFrame(frame.data(), static_cast<uint32_t>(frame.size()), info);
     if (FAILED(writeHr)) {
-      // The consumer owns the ring lifetime. A failed write normally means it
-      // closed; discard the stale mapping and return to quiet polling without a
-      // notification.
-      RC_LOG(L"frame ring write stopped (%s); waiting for a camera consumer",
-             rcwin::hrMessage(writeHr).c_str());
-      ring.close();
-      workerState = ConnectionState::WaitingForCameraConsumer;
-      postState(ConnectionState::WaitingForCameraConsumer,
-                QStringLiteral("The camera consumer closed. Waiting for it to reopen."));
-      if (waitOrStop(stopEvent_, kConsumerPollMillis)) break;
-      continue;
+      if (writeHr == kRingBusy) {
+        // A consumer generation transition or an unsupported second writer held the
+        // zero-timeout guard. Dropping one frame preserves the non-blocking contract.
+      } else if (writeHr == kRingNotFound) {
+        // The consumer owns the ring lifetime. Discard the stale mapping and return to
+        // quiet polling without an alarming notification.
+        RC_LOG(L"camera consumer closed; waiting for it to reopen");
+        ring.close();
+        workerState = ConnectionState::WaitingForCameraConsumer;
+        postState(ConnectionState::WaitingForCameraConsumer,
+                  QStringLiteral("The camera consumer closed. Waiting for it to reopen."));
+        if (waitOrStop(stopEvent_, kConsumerPollMillis)) break;
+        continue;
+      } else {
+        const QString detail = hresultDetail(L"FrameRing::writeFrame", writeHr);
+        RC_ERR(L"FrameRing::writeFrame failed: %s", rcwin::hrMessage(writeHr).c_str());
+        workerState = ConnectionState::ActualFailure;
+        postState(ConnectionState::ActualFailure, detail);
+        ring.close();
+        break;
+      }
     }
 
-    ++frameIndex;
+    if (SUCCEEDED(writeHr)) ++frameIndex;
     ++pacingTick;
 
     // Every deadline is derived from the reconnect origin. Timer/wake latency
     // can make one frame late, but it cannot accumulate into a permanently
     // slower frame rate.
     LARGE_INTEGER now{};
-    ::QueryPerformanceCounter(&now);
+    if (!::QueryPerformanceCounter(&now)) {
+      const HRESULT hr = rcwin::hrFromLastError();
+      RC_ERR(L"QueryPerformanceCounter failed: %s", rcwin::hrMessage(hr).c_str());
+      postState(ConnectionState::ActualFailure,
+                hresultDetail(L"QueryPerformanceCounter", hr));
+      break;
+    }
     const LONGLONG elapsed100ns =
-        (now.QuadPart - pacingOrigin.QuadPart) * 10000000LL / qpcFrequency.QuadPart;
+        qpcTo100ns(now.QuadPart - pacingOrigin.QuadPart, qpcFrequency.QuadPart);
     LONGLONG untilDeadline = static_cast<LONGLONG>(pacingTick) * interval100ns - elapsed100ns;
     if (untilDeadline < 0) untilDeadline = 0;
 

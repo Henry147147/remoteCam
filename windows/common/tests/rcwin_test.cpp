@@ -336,6 +336,16 @@ void testRingRejectsHostileGeometry() {
             S_FALSE, std::string("readLatest rejects ") + c.name);
   }
 
+  rcwin::FrameInfo wrongFormat;
+  wrongFormat.width = 320;
+  wrongFormat.height = 240;
+  wrongFormat.stride = 320;
+  wrongFormat.format = 0x41524742u;  // "BGRA"
+  check(SUCCEEDED(client.writeFrame(frame.data(), bytes, wrongFormat)),
+        "writeFrame publishes a hostile non-NV12 format for the reader test");
+  checkEq(server.readLatest(scratch.data(), static_cast<uint32_t>(scratch.size()), got),
+          S_FALSE, "readLatest rejects unsupported pixel formats");
+
   // And the ring is not wedged by having seen them: a good frame still reads back.
   rcwin::FrameInfo good;
   good.width = 320;
@@ -443,6 +453,57 @@ void testRingSeqlockUnderContention() {
   check(goodReads.load() > 0, "the reader actually observed frames (test is not vacuous)");
 }
 
+void testRingTracksConsumerLifetime() {
+  std::printf("Frame ring tracks camera-consumer lifetime\n");
+
+  rcwin::FrameRing consumer;
+  check(SUCCEEDED(consumer.create(rcwin::testRingNames())), "consumer creates ring");
+  rcwin::FrameRing secondConsumer;
+  check(SUCCEEDED(secondConsumer.create(rcwin::testRingNames())),
+        "a second camera consumer attaches to the ring");
+  rcwin::FrameRing producer;
+  check(SUCCEEDED(producer.open(true, rcwin::testRingNames())), "producer opens ring");
+
+  const rcwin::Nv12Layout layout = rcwin::nv12Layout(320, 240);
+  std::vector<uint8_t> frame(layout.totalSize, 0x33);
+  rcwin::FrameInfo info;
+  info.width = 320;
+  info.height = 240;
+  info.stride = 320;
+  info.format = rcwin::kFourccNv12;
+  check(SUCCEEDED(producer.writeFrame(
+            frame.data(), static_cast<uint32_t>(frame.size()), info)),
+        "producer writes while a consumer is open");
+
+  consumer.close();
+  check(SUCCEEDED(producer.writeFrame(
+            frame.data(), static_cast<uint32_t>(frame.size()), info)),
+        "producer remains connected while another consumer is open");
+  secondConsumer.close();
+  check(producer.writeFrame(frame.data(), static_cast<uint32_t>(frame.size()), info) ==
+            HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND),
+        "producer detects the last consumer closing");
+
+  rcwin::FrameRing replacement;
+  check(SUCCEEDED(replacement.create(rcwin::testRingNames())),
+        "replacement consumer reuses the still-mapped name");
+  std::vector<uint8_t> scratch(rcwin::kRingSlotBytes);
+  rcwin::FrameInfo latest;
+  checkEq(replacement.readLatest(
+              scratch.data(), static_cast<uint32_t>(scratch.size()), latest),
+          S_FALSE, "replacement generation does not inherit a stale frame");
+  check(producer.writeFrame(frame.data(), static_cast<uint32_t>(frame.size()), info) ==
+            HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND),
+        "stale producer cannot publish into a replacement generation");
+
+  producer.close();
+  check(SUCCEEDED(producer.open(true, rcwin::testRingNames())),
+        "producer reconnects to the replacement generation");
+  check(SUCCEEDED(producer.writeFrame(
+            frame.data(), static_cast<uint32_t>(frame.size()), info)),
+        "reconnected producer writes successfully");
+}
+
 }  // namespace
 
 int main() {
@@ -453,6 +514,7 @@ int main() {
   testRingBasics();
   testRingRejectsHostileGeometry();
   testRingSeqlockUnderContention();
+  testRingTracksConsumerLifetime();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

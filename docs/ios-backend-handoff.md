@@ -15,10 +15,11 @@ decisions that must be made jointly before either side can finish the security l
 1. Add the Windows TCP listener with `TCP_NODELAY` and the 16-byte framing from
    `protocol.md`. Close on payloads over 16 MiB, nonzero reserved header bytes, or
    reserved flag bits. Ignore channel 2.
-2. **Implemented in `windows/app`:** publish `_remotecam._tcp` with TXT keys `v`,
-   `name`, `id`, and `caps`. The `id` is exactly 16 lowercase hex characters and is
-   persisted per Windows user so it survives rename, reboot, and IP changes. The
-   Windows build and a physical iPhone still need the live LAN verification below.
+2. `windows/app` contains the `_remotecam._tcp` advertiser with TXT keys `v`, `name`,
+   `id`, and `caps`. The `id` is exactly 16 lowercase hex characters and is persisted
+   per Windows user so it survives rename, reboot, and IP changes. The Qt shell does
+   not start advertising until a real TCP receiver is bound; the receiver integration
+   must call `BonjourAdvertiser::start()` only after `listen()` succeeds.
 3. Add a bounded CBOR codec and ignore unknown keys/message types. iOS emits RFC 8949
    deterministic map ordering (shorter encoded text keys first, then lexical byte
    order) and encodes floating-point camera values as binary64.
@@ -170,16 +171,16 @@ pairing contract is settled.
 
 ## LAN discovery integration checkpoint
 
-The Qt app now registers the Bonjour service with the Windows inbox
-`DnsServiceRegister` API and the iOS app browses it with `NWBrowser`. Both sides use
-TCP port `7890` for the current integration build. Manual IP/hostname plus port entry
-remains available in iOS for networks that block Bonjour or isolate clients.
+The Qt app has a Bonjour advertiser using the Windows inbox `DnsServiceRegister` API,
+and the iOS app browses it with `NWBrowser`. Both sides reserve TCP port `7890` for the
+current integration build. Manual IP/hostname plus port entry remains available in
+iOS for networks that block Bonjour or isolate clients.
 
-The Windows transport/backend work is not replaced by the advertisement: the TCP
-receiver still needs to bind port `7890`, set `TCP_NODELAY`, accept the iOS `hello`,
-and implement the handshake/framing work above. The installer also needs an inbound
-Windows Firewall rule for that listener. Before calling discovery verified, run the
-Qt app on Windows and confirm a physical iPhone on the same LAN lists the PC, removes
-it when the app closes, and can open the advertised endpoint. The iOS 27 beta
-simulator currently reports stale interface indexes while browsing host-published
-mDNS records, so the simulator is not a substitute for that physical-device matrix.
+The TCP receiver still needs to bind port `7890`, set `TCP_NODELAY`, accept the iOS
+`hello`, implement the handshake/framing work above, and then start the advertiser.
+The installer also needs an inbound Windows Firewall rule for that listener. Before
+calling discovery verified, run the Qt app on Windows and confirm a physical iPhone
+on the same LAN lists the PC, removes it when the app closes, and can open the
+advertised endpoint. The iOS 27 beta simulator currently reports stale interface
+indexes while browsing host-published mDNS records, so the simulator is not a
+substitute for that physical-device matrix.

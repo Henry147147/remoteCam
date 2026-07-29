@@ -126,6 +126,16 @@ declared as their **first** member, so it is constructed first and destroyed las
 Anything new that is allocated here and handed across the COM boundary must do the
 same. See `windows/vcam/module_lock.h`.
 
+## Frame-ring lifetime is explicit
+
+Ring version 2 adds a camera-consumer count, generation, and named write guard. A
+producer's mapping handle keeps the kernel object alive after the virtual camera
+closes, so handle validity alone cannot mean “connected.” `FrameRing::writeFrame`
+now fails when its consumer generation disappears or changes; the Qt producer must
+close that stale handle and return to polling. The write guard uses a zero timeout on
+the frame path, preserving the non-blocking producer contract while serializing the
+rare close/reopen transition.
+
 ## Logs are capped and rotated
 
 `%ProgramData%\RemoteCam\logs\<tag>.log` is capped at 4 MB with one previous generation
@@ -143,17 +153,19 @@ than rediscovering this.
 
 ## Bonjour advertisement and the Windows transport port
 
-The Qt app advertises `_remotecam._tcp.local` with the inbox Windows
+The Qt app can advertise `_remotecam._tcp.local` with the inbox Windows
 `DnsServiceRegister` API. It deliberately uses multicast DNS
 (`unicastEnabled = FALSE`); this matches iOS `NWBrowser` and does not require a Bonjour
 redistributable or Apple's restricted multicast entitlement.
 
 The current integration port is TCP **7890** (`BonjourAdvertiser::kDefaultPort`). The
 manual IP/port screen on iOS remains available and must use the same listener port.
-When the production Windows TCP receiver lands, it must bind that port (or pass its
-replacement port into the advertiser in the same change) and set `TCP_NODELAY` on
-accepted phone connections. Advertising a port and listening on a different one is a
-discovery failure even though both APIs report success.
+The Qt shell deliberately remains in **Waiting for network receiver** and does not call
+`BonjourAdvertiser::start()` yet: there is no TCP receiver in this repository, and
+advertising a closed port is a false-success discovery failure. When the production
+Windows receiver lands, it must bind that port, set `TCP_NODELAY` on accepted phone
+connections, and only then call `start()` (or pass a replacement bound port into the
+advertiser in the same change).
 
 TXT fields are the protocol-defined `v`, `name`, `id`, and `caps`. `id` is persisted
 with `QSettings` under the current user and is exactly 16 lowercase hexadecimal

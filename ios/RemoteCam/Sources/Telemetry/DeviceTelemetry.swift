@@ -67,14 +67,14 @@ final class DeviceTelemetry: ObservableObject {
         case .landscapeRight: degrees = -90
         default: degrees = rawDegrees
         }
-        guard abs(snapshot.orientationDegrees - degrees) >= 1 else { return }
+        guard degrees.isFinite, abs(snapshot.orientationDegrees - degrees) >= 1 else { return }
         snapshot.orientationDegrees = degrees
         onUpdate?(snapshot)
     }
 
     private func refreshSystemValues() {
         let device = UIDevice.current
-        snapshot.batteryLevel = max(Double(device.batteryLevel), 0)
+        snapshot.batteryLevel = min(max(Double(device.batteryLevel), 0), 1)
         snapshot.charging = device.batteryState == .charging || device.batteryState == .full
         snapshot.thermal = switch ProcessInfo.processInfo.thermalState {
         case .fair: .fair

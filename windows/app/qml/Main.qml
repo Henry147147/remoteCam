@@ -133,7 +133,9 @@ ApplicationWindow {
                         wrapMode: Text.WordWrap
                     }
                     Label {
-                        text: "Manual address: " + lanDiscovery.computerName + ":" + lanDiscovery.port
+                        text: lanDiscovery.state === 1
+                              ? "Manual address: " + lanDiscovery.computerName + ":" + lanDiscovery.port
+                              : "Planned receiver address: " + lanDiscovery.computerName + ":" + lanDiscovery.port
                         color: "#91a0b8"
                         font.pixelSize: 12
                     }

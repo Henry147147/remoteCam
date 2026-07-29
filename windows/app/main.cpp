@@ -47,7 +47,9 @@ int main(int argc, char* argv[]) {
     RC_LOG(L"acquired per-session producer guard %s", kProducerMutexName);
     producer.start();
   }
-  discovery.start();
+  // Do not advertise a dead endpoint. The receiver integration must call start() only
+  // after its TCP listen succeeds; until then manual and Bonjour connections would
+  // both lead the phone to a closed port.
 
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty(QStringLiteral("frameProducer"), &producer);

@@ -25,9 +25,9 @@
 		<string>_remotecam._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>RemoteCam uses the camera only while you choose to stream video to a paired computer.</string>
+	<string>RemoteCam uses the camera only while you choose to stream video to a computer you connect to.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>RemoteCam finds and securely connects to your Windows computer on the local network.</string>
+	<string>RemoteCam finds and connects to your Windows computer on the local network.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -35,12 +35,12 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UILaunchScreen</key>
+	<dict/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>voip</string>
 	</array>
-	<key>UILaunchScreen</key>
-	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

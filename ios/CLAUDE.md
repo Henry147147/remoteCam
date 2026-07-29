@@ -71,11 +71,11 @@ tap focus and manual controls, low-latency H.264/HEVC Annex-B encode, stats bitr
 orientation/battery/thermal reporting, PC-driven preview saving, diagnostics,
 multitasking capture setup, and Live Activity.
 
-The simulator suite reports 12 passing tests and one expected VideoToolbox skip; the
-Release target compiles for iPhoneOS. It has **not** run on a physical device: this
-Mac has no signed-in Xcode account/provisioning profile and the connected phone has
-Developer Mode disabled. Do not describe capture, encode, background operation, or
-thermals as verified.
+The simulator suite reports 16 passing tests and one expected VideoToolbox skip. On
+2026-07-28, a signed Debug build made with the beta Xcode/iPhoneOS 27 toolchain was
+installed and launched on a physical iPhone. This verifies signing, installation,
+and startup only. Do not describe capture, encode, background operation, thermals,
+or the Windows end-to-end path as verified until their manual matrices pass.
 
 Production pairing, authenticated control/media encryption, and USB remain blocked
 by underspecified shared protocol decisions. Release rejects unauthenticated

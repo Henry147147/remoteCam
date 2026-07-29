@@ -34,6 +34,7 @@ final class VideoEncoder: @unchecked Sendable {
     func configure(_ configuration: StreamConfiguration) throws {
         try queue.sync {
             invalidateLocked()
+            let configuration = try configuration.validated()
             let codec: CMVideoCodecType = configuration.codec == .hevc ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264
             let encoderSpecification = [
                 kVTVideoEncoderSpecification_EnableLowLatencyRateControl as String: true
@@ -54,17 +55,21 @@ final class VideoEncoder: @unchecked Sendable {
             guard status == noErr, let created else { throw VideoEncoderError.cannotCreate(status) }
             session = created
             self.configuration = configuration
-
-            try set(kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue, on: created)
-            try set(kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse, on: created)
-            try set(kVTCompressionPropertyKey_ExpectedFrameRate, value: configuration.framesPerSecond as CFNumber, on: created)
-            try set(kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2 as CFNumber, on: created)
-            try applyBitrateLocked(configuration.bitrate)
-            if configuration.codec == .h264 {
-                try set(kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel, on: created)
+            do {
+                try set(kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue, on: created)
+                try set(kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse, on: created)
+                try set(kVTCompressionPropertyKey_ExpectedFrameRate, value: configuration.framesPerSecond as CFNumber, on: created)
+                try set(kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2 as CFNumber, on: created)
+                try applyBitrateLocked(configuration.bitrate)
+                if configuration.codec == .h264 {
+                    try set(kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel, on: created)
+                }
+                let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(created)
+                guard prepareStatus == noErr else { throw VideoEncoderError.cannotCreate(prepareStatus) }
+            } catch {
+                invalidateLocked()
+                throw error
             }
-            let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(created)
-            guard prepareStatus == noErr else { throw VideoEncoderError.cannotCreate(prepareStatus) }
         }
     }
 
@@ -110,6 +115,9 @@ final class VideoEncoder: @unchecked Sendable {
 
     private func applyBitrateLocked(_ bitrate: Int) throws {
         guard let session else { return }
+        guard (StreamConfiguration.minimumBitrate...StreamConfiguration.maximumBitrate).contains(bitrate) else {
+            throw StreamConfigurationError.invalidBitrate
+        }
         try set(kVTCompressionPropertyKey_AverageBitRate, value: bitrate as CFNumber, on: session)
         let bytesPerSecond = max(bitrate / 8, 1)
         try set(

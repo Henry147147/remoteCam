@@ -7,6 +7,7 @@
 
 #include <array>
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -44,23 +45,33 @@ QString loadOrCreateServiceID() {
 
 struct BonjourAdvertiser::RegistrationContext {
   std::atomic<BonjourAdvertiser*> owner;
+  std::mutex ownerMutex;
+  HANDLE callbackComplete = nullptr;
 };
 
 BonjourAdvertiser::BonjourAdvertiser(QObject* parent)
     : QObject(parent), computerName_(loadComputerName()), serviceID_(loadOrCreateServiceID()) {}
 
 BonjourAdvertiser::~BonjourAdvertiser() {
-  if (context_) context_->owner.store(nullptr, std::memory_order_release);
-
-  // DnsServiceRegister registrations are tied to process lifetime. The app owns
-  // this object until process shutdown, so Windows removes the record for us. If
-  // an asynchronous callback is still outstanding, its tiny context and service
-  // instance intentionally remain valid until process teardown rather than racing
-  // a DNS callback on another thread.
-  if (!callbackPending_) {
-    if (instance_) ::DnsServiceFreeInstance(instance_);
+  if (context_) {
+    {
+      std::lock_guard<std::mutex> lock(context_->ownerMutex);
+      context_->owner.store(nullptr, std::memory_order_release);
+    }
+    if (callbackPending_) {
+      ::DnsServiceRegisterCancel(&cancel_);
+      // The context is callback-owned until Windows confirms completion. Avoid a
+      // shutdown UAF even if the DNS client service is unhealthy and never answers.
+      if (::WaitForSingleObject(context_->callbackComplete, 5000) != WAIT_OBJECT_0) {
+        context_ = nullptr;  // intentional process-exit leak, safer than freeing in use
+      }
+    }
+  }
+  if (context_) {
+    if (context_->callbackComplete) ::CloseHandle(context_->callbackComplete);
     delete context_;
   }
+  if (instance_) ::DnsServiceFreeInstance(instance_);
 }
 
 QString BonjourAdvertiser::statusLabel() const {
@@ -71,6 +82,8 @@ QString BonjourAdvertiser::statusLabel() const {
       return QStringLiteral("Visible to nearby iPhones");
     case AdvertisementState::Failed:
       return QStringLiteral("Automatic discovery unavailable");
+    case AdvertisementState::WaitingForReceiver:
+      return QStringLiteral("Waiting for network receiver");
   }
   return QStringLiteral("Automatic discovery unavailable");
 }
@@ -102,7 +115,17 @@ void BonjourAdvertiser::start() {
     return;
   }
 
-  context_ = new RegistrationContext{this};
+  context_ = new RegistrationContext;
+  context_->owner.store(this, std::memory_order_release);
+  context_->callbackComplete = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (!context_->callbackComplete) {
+    delete context_;
+    context_ = nullptr;
+    setFailure(QStringLiteral("Windows could not create the discovery callback guard."));
+    ::DnsServiceFreeInstance(instance_);
+    instance_ = nullptr;
+    return;
+  }
   request_ = {};
   request_.Version = DNS_QUERY_REQUEST_VERSION1;
   request_.InterfaceIndex = 0;
@@ -112,12 +135,14 @@ void BonjourAdvertiser::start() {
   request_.unicastEnabled = FALSE;  // mDNS on the local link, not unicast DNS.
 
   callbackPending_ = true;
-  const DWORD result = ::DnsServiceRegister(&request_, nullptr);
+  cancel_ = {};
+  const DWORD result = ::DnsServiceRegister(&request_, &cancel_);
   if (result != DNS_REQUEST_PENDING) {
     callbackPending_ = false;
     setFailure(QStringLiteral("Windows DNS-SD registration failed with error %1.").arg(result));
     ::DnsServiceFreeInstance(instance_);
     instance_ = nullptr;
+    ::CloseHandle(context_->callbackComplete);
     delete context_;
     context_ = nullptr;
   }
@@ -129,14 +154,15 @@ void WINAPI BonjourAdvertiser::registrationComplete(DWORD status, void* queryCon
 
   auto* context = static_cast<RegistrationContext*>(queryContext);
   if (!context) return;
-  BonjourAdvertiser* owner = context->owner.load(std::memory_order_acquire);
-  if (!owner) {
-    delete context;
-    return;
+  {
+    std::lock_guard<std::mutex> lock(context->ownerMutex);
+    BonjourAdvertiser* owner = context->owner.load(std::memory_order_acquire);
+    if (owner) {
+      QMetaObject::invokeMethod(owner, [owner, status] { owner->finishRegistration(status); },
+                                Qt::QueuedConnection);
+    }
   }
-
-  QMetaObject::invokeMethod(owner, [owner, status] { owner->finishRegistration(status); },
-                            Qt::QueuedConnection);
+  ::SetEvent(context->callbackComplete);
 }
 
 void BonjourAdvertiser::finishRegistration(DWORD status) {
@@ -148,6 +174,7 @@ void BonjourAdvertiser::finishRegistration(DWORD status) {
     ::DnsServiceFreeInstance(instance_);
     instance_ = nullptr;
   }
+  if (context_->callbackComplete) ::CloseHandle(context_->callbackComplete);
   delete context_;
   context_ = nullptr;
 

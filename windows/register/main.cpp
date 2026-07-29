@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include "rcwin/guids.h"
 #include "rcwin/hr.h"
@@ -147,12 +148,21 @@ HRESULT removeRegistry() {
 }
 
 HRESULT readRegisteredPath(std::wstring& out) {
-  wchar_t buffer[1024];
-  DWORD bytes = sizeof(buffer);
-  const LONG status = ::RegGetValueW(HKEY_LOCAL_MACHINE, rcwin::kInprocKeyPath, nullptr,
-                                     RRF_RT_REG_SZ, nullptr, buffer, &bytes);
+  DWORD bytes = 0;
+  LONG status = ::RegGetValueW(HKEY_LOCAL_MACHINE, rcwin::kInprocKeyPath, nullptr,
+                               RRF_RT_REG_SZ, nullptr, nullptr, &bytes);
   if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
-  out.assign(buffer);
+  if (bytes < sizeof(wchar_t) || bytes % sizeof(wchar_t) != 0) {
+    return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+  }
+  std::vector<wchar_t> buffer(bytes / sizeof(wchar_t));
+  status = ::RegGetValueW(HKEY_LOCAL_MACHINE, rcwin::kInprocKeyPath, nullptr,
+                          RRF_RT_REG_SZ, nullptr, buffer.data(), &bytes);
+  if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
+  if (buffer.empty() || buffer.back() != L'\0') {
+    return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+  }
+  out.assign(buffer.data());
   return S_OK;
 }
 
@@ -204,7 +214,7 @@ int usage() {
       L"  --unregister             remove the camera and the CLSID           [admin]\n"
       L"  --session                dev mode: create a Session-lifetime camera and hold\n"
       L"                           it until Ctrl+C. Needs the CLSID already registered,\n"
-      L"                           but no elevation -- this is the fast iteration loop.\n"
+      L"                           and administrator rights for AllUsers access.\n"
       L"\n");
   return 2;
 }
@@ -275,12 +285,26 @@ int wmain(int argc, wchar_t** argv) {
       print(L"Registering RemoteCam\n");
       print(L"  dll           : %s\n", dllPath.c_str());
 
-      HRESULT hr = ensureLogDirectory();
-      if (FAILED(hr)) print(L"  WARNING: log directory: %s\n", rcwin::hrMessage(hr).c_str());
+      std::wstring previousPath;
+      const HRESULT previousHr = readRegisteredPath(previousPath);
+      if (FAILED(previousHr) &&
+          previousHr != HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) &&
+          previousHr != HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)) {
+        print(L"  registry      : could not read existing state: %s\n",
+              rcwin::hrMessage(previousHr).c_str());
+        exitCode = 1;
+      }
 
-      hr = writeRegistry(dllPath);
+      HRESULT hr = exitCode == 0 ? ensureLogDirectory() : E_FAIL;
+      if (exitCode == 0 && FAILED(hr)) {
+        print(L"  WARNING: log directory: %s\n", rcwin::hrMessage(hr).c_str());
+      }
+
+      hr = exitCode == 0 ? writeRegistry(dllPath) : E_FAIL;
       if (FAILED(hr)) {
-        print(L"  registry      : FAILED %s\n", rcwin::hrMessage(hr).c_str());
+        if (exitCode == 0) {
+          print(L"  registry      : FAILED %s\n", rcwin::hrMessage(hr).c_str());
+        }
         exitCode = 1;
       } else {
         print(L"  registry      : HKLM\\%s\n", rcwin::kInprocKeyPath);
@@ -290,6 +314,12 @@ int wmain(int argc, wchar_t** argv) {
         if (SUCCEEDED(hr)) hr = camera->Start(nullptr);
         if (FAILED(hr)) {
           print(L"  camera        : FAILED %s\n", rcwin::hrMessage(hr).c_str());
+          const HRESULT rollback = SUCCEEDED(previousHr)
+                                       ? writeRegistry(previousPath)
+                                       : removeRegistry();
+          print(L"  registry      : %s after camera failure\n",
+                SUCCEEDED(rollback) ? L"restored previous state"
+                                    : rcwin::hrMessage(rollback).c_str());
           exitCode = 1;
         } else {
           print(L"  camera        : created (system lifetime, all users)\n");
@@ -325,17 +355,21 @@ int wmain(int argc, wchar_t** argv) {
     // Session lifetime leaves nothing behind: the camera exists only while this process
     // does. That makes it the right tool for iterating on the DLL, since a rebuild only
     // needs this process restarted rather than an elevated re-registration.
-    ComPtr<IMFVirtualCamera> camera;
-    HRESULT hr = createCamera(MFVirtualCameraLifetime_Session, &camera);
-    if (SUCCEEDED(hr)) hr = camera->Start(nullptr);
-    if (FAILED(hr)) {
-      print(L"Failed to create session camera: %s\n", rcwin::hrMessage(hr).c_str());
-      print(L"Is the CLSID registered? Run --status.\n");
-      exitCode = 1;
+    if (!isElevated()) {
+      exitCode = requireElevation(L"session");
     } else {
-      print(L"Session camera running. Press Ctrl+C to remove it.\n");
-      reportEnumeration();
-      for (;;) ::Sleep(1000);
+      ComPtr<IMFVirtualCamera> camera;
+      HRESULT hr = createCamera(MFVirtualCameraLifetime_Session, &camera);
+      if (SUCCEEDED(hr)) hr = camera->Start(nullptr);
+      if (FAILED(hr)) {
+        print(L"Failed to create session camera: %s\n", rcwin::hrMessage(hr).c_str());
+        print(L"Is the CLSID registered? Run --status.\n");
+        exitCode = 1;
+      } else {
+        print(L"Session camera running. Press Ctrl+C to remove it.\n");
+        reportEnumeration();
+        for (;;) ::Sleep(1000);
+      }
     }
 
   } else {

@@ -12,8 +12,10 @@ private final class RemoteCamTransport: @unchecked Sendable {
     private let queue = DispatchQueue(label: "org.remotecam.transport", qos: .userInteractive)
     private var connection: NWConnection?
     private var decoder = WireFrameDecoder()
-    private var pendingVideoBytes = 0
-    private let maximumPendingVideoBytes = 4 * 1_024 * 1_024
+    private let videoBudgetLock = NSLock()
+    private var reservedVideoBytes = 0
+    private let maximumPendingVideoBytes = 20 * 1_024 * 1_024
+    private var failureReported = false
     private let event: @Sendable (TransportEvent) -> Void
 
     init(event: @escaping @Sendable (TransportEvent) -> Void) {
@@ -25,7 +27,7 @@ private final class RemoteCamTransport: @unchecked Sendable {
             guard let self else { return }
             self.connection?.cancel()
             self.decoder = WireFrameDecoder()
-            self.pendingVideoBytes = 0
+            self.failureReported = false
             let tcp = NWProtocolTCP.Options()
             tcp.noDelay = true
             let parameters = NWParameters(tls: nil, tcp: tcp)
@@ -39,9 +41,9 @@ private final class RemoteCamTransport: @unchecked Sendable {
                     self.event(.ready)
                     self.receive(on: connection)
                 case .failed(let error):
-                    self.event(.failed(error.localizedDescription))
+                    self.reportFailure(error.localizedDescription)
                 case .cancelled:
-                    self.event(.cancelled)
+                    if !self.failureReported { self.event(.cancelled) }
                 default:
                     break
                 }
@@ -51,25 +53,41 @@ private final class RemoteCamTransport: @unchecked Sendable {
     }
 
     func send(_ frame: WireFrame) {
-        queue.async { [weak self] in
-            guard let self, let connection = self.connection else { return }
-            do {
-                let content = try frame.encoded()
-                let isVideo = frame.channel == WireChannel.video.rawValue
-                if isVideo,
-                   !frame.flags.contains(.keyframe),
-                   self.pendingVideoBytes >= self.maximumPendingVideoBytes {
-                    return
-                }
-                if isVideo { self.pendingVideoBytes += content.count }
-                connection.send(content: content, completion: .contentProcessed { [weak self, weak connection] error in
-                    guard let self, let connection, connection === self.connection else { return }
-                    if isVideo { self.pendingVideoBytes = max(0, self.pendingVideoBytes - content.count) }
-                    if let error { self.event(.failed(error.localizedDescription)) }
-                })
-            } catch {
-                self.event(.failed(error.localizedDescription))
+        let content: Data
+        do {
+            content = try frame.encoded()
+        } catch {
+            queue.async { [weak self] in self?.reportFailure(error.localizedDescription) }
+            return
+        }
+
+        let isVideo = frame.channel == WireChannel.video.rawValue
+        if isVideo {
+            videoBudgetLock.lock()
+            let available = maximumPendingVideoBytes - min(
+                reservedVideoBytes,
+                maximumPendingVideoBytes
+            )
+            guard content.count <= available else {
+                videoBudgetLock.unlock()
+                return
             }
+            reservedVideoBytes += content.count
+            videoBudgetLock.unlock()
+        }
+
+        queue.async { [weak self] in
+            guard let self else { return }
+            guard let connection = self.connection else {
+                if isVideo { self.releaseVideoReservation(content.count) }
+                return
+            }
+            connection.send(content: content, completion: .contentProcessed { [weak self, weak connection] error in
+                guard let self else { return }
+                if isVideo { self.releaseVideoReservation(content.count) }
+                guard let connection, connection === self.connection else { return }
+                if let error { self.reportFailure(error.localizedDescription) }
+            })
         }
     }
 
@@ -88,18 +106,31 @@ private final class RemoteCamTransport: @unchecked Sendable {
                     for frame in try self.decoder.append(data) { self.event(.frame(frame)) }
                 }
             } catch {
-                self.event(.failed(error.localizedDescription))
+                self.reportFailure(error.localizedDescription)
                 connection.cancel()
                 return
             }
             if let error {
-                self.event(.failed(error.localizedDescription))
+                self.reportFailure(error.localizedDescription)
             } else if complete {
-                self.event(.failed("The Windows computer closed the connection."))
+                self.reportFailure("The Windows computer closed the connection.")
             } else {
                 self.receive(on: connection)
             }
         }
+    }
+
+    private func reportFailure(_ message: String) {
+        guard !failureReported else { return }
+        failureReported = true
+        connection?.cancel()
+        event(.failed(message))
+    }
+
+    private func releaseVideoReservation(_ bytes: Int) {
+        videoBudgetLock.lock()
+        reservedVideoBytes = max(0, reservedVideoBytes - bytes)
+        videoBudgetLock.unlock()
     }
 }
 
@@ -197,18 +228,29 @@ final class RemoteCamSession: ObservableObject {
             case "pair_required":
                 if let host { updatePhase(.awaitingPairing(host)) }
             case "ready":
-                guard controlChannelAuthenticated || allowsInsecureDevelopmentSession else {
+                guard sessionIsTrusted else {
+                    intentionalDisconnect = true
+                    reconnectTask?.cancel()
+                    transport.cancel()
                     updatePhase(.failed("The server tried to start an unauthenticated session. Secure pairing must complete first."))
                     return
                 }
-                guard let configuration = Self.configuration(from: message), let host else { return }
+                guard let configuration = Self.configuration(from: message), let host else {
+                    intentionalDisconnect = true
+                    transport.cancel()
+                    updatePhase(.failed("The server requested an invalid video configuration."))
+                    return
+                }
                 updatePhase(.ready(host, configuration))
                 onReady?(configuration)
             case "stats":
-                if let bitrate = message.fields["target_bitrate"]?.unsignedValue.flatMap(Int.init(exactly:)) {
+                guard sessionIsTrusted else { return }
+                if let bitrate = message.fields["target_bitrate"]?.unsignedValue.flatMap(Int.init(exactly:)),
+                   (StreamConfiguration.minimumBitrate...StreamConfiguration.maximumBitrate).contains(bitrate) {
                     onTargetBitrate?(bitrate)
                 }
             default:
+                guard sessionIsTrusted else { return }
                 onControl?(message)
             }
         } catch {
@@ -245,9 +287,20 @@ final class RemoteCamSession: ObservableObject {
               let width = message.fields["width"]?.unsignedValue.flatMap(Int.init(exactly:)),
               let height = message.fields["height"]?.unsignedValue.flatMap(Int.init(exactly:)),
               let fps = message.fields["fps"]?.unsignedValue.flatMap(Int.init(exactly:)),
-              let bitrate = message.fields["bitrate"]?.unsignedValue.flatMap(Int.init(exactly:)),
-              (1...120).contains(fps), width > 0, height > 0, bitrate > 0 else { return nil }
-        return StreamConfiguration(codec: codec, width: width, height: height, framesPerSecond: fps, bitrate: bitrate)
+              let bitrate = message.fields["bitrate"]?.unsignedValue.flatMap(Int.init(exactly:)) else {
+            return nil
+        }
+        return try? StreamConfiguration(
+            codec: codec,
+            width: width,
+            height: height,
+            framesPerSecond: fps,
+            bitrate: bitrate
+        ).validated()
+    }
+
+    private var sessionIsTrusted: Bool {
+        controlChannelAuthenticated || allowsInsecureDevelopmentSession
     }
 
     private static var monotonicMicros: UInt64 {

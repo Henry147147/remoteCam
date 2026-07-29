@@ -41,4 +41,19 @@ final class ControlMessageTests: XCTestCase {
             XCTAssertEqual(error as? ControlMessageError, .payloadTooLarge)
         }
     }
+
+    func testRejectsHostileStreamConfigurationsBeforeFrameworkConversions() {
+        let cases = [
+            StreamConfiguration(codec: .h264, width: Int.max, height: 1_080, framesPerSecond: 30, bitrate: 4_000_000),
+            StreamConfiguration(codec: .h264, width: 1_919, height: 1_080, framesPerSecond: 30, bitrate: 4_000_000),
+            StreamConfiguration(codec: .h264, width: 1_920, height: 1_080, framesPerSecond: Int.max, bitrate: 4_000_000),
+            StreamConfiguration(codec: .h264, width: 1_920, height: 1_080, framesPerSecond: 30, bitrate: Int.max)
+        ]
+
+        for configuration in cases {
+            XCTAssertThrowsError(try configuration.validated())
+        }
+        XCTAssertNoThrow(try StreamConfiguration.default1080p.validated())
+        XCTAssertNoThrow(try StreamConfiguration.thermalFallback.validated())
+    }
 }

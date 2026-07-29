@@ -34,6 +34,7 @@ inline constexpr wchar_t kComDescription[] = L"RemoteCam Virtual Camera Source";
 // objects in the two sessions and the handoff would silently never connect.
 inline constexpr wchar_t kFrameSectionName[] = L"Global\\RemoteCam.Frames.0";
 inline constexpr wchar_t kFrameEventName[] = L"Global\\RemoteCam.Frame.0";
+inline constexpr wchar_t kFrameWriteGuardName[] = L"Global\\RemoteCam.FrameWriteGuard.0";
 
 // Registry location of the COM registration.
 //

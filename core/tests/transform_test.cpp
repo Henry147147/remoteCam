@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -301,6 +302,21 @@ void testDegenerateInputs() {
   p.zoom = 0.0f;  // a slider dragged to zero must not produce NaNs
   const rc::Mat3 z = rc::destToSource(p);
   check(std::isfinite(z.apply({1, 1}).x), "zero zoom stays finite");
+
+  p.zoom = std::numeric_limits<float>::quiet_NaN();
+  p.panX = std::numeric_limits<float>::infinity();
+  p.panY = -std::numeric_limits<float>::infinity();
+  const rc::Mat3 hostileControls = rc::destToSource(p);
+  const rc::Vec2 mapped = hostileControls.apply({25, 75});
+  check(std::isfinite(mapped.x) && std::isfinite(mapped.y),
+        "non-finite zoom and pan are sanitized");
+
+  p.rotationDeg = std::numeric_limits<float>::quiet_NaN();
+  checkPoint(rc::destToSource(p).apply({5, 9}), 5, 9, 1e-5f,
+             "non-finite rotation falls back to identity");
+  rc::clampPanForCoverage(p);
+  checkNear(p.panX, 0.0f, 1e-5f, "invalid transform clears pan x");
+  checkNear(p.panY, 0.0f, 1e-5f, "invalid transform clears pan y");
 }
 
 }  // namespace

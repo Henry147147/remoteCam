@@ -23,6 +23,7 @@ class BonjourAdvertiser final : public QObject {
     Starting,
     Advertising,
     Failed,
+    WaitingForReceiver,
   };
   Q_ENUM(AdvertisementState)
 
@@ -54,11 +55,13 @@ class BonjourAdvertiser final : public QObject {
   void finishRegistration(DWORD status);
   void setFailure(QString detail);
 
-  AdvertisementState state_ = AdvertisementState::Starting;
-  QString statusDetail_ = QStringLiteral("Starting local-network discovery...");
+  AdvertisementState state_ = AdvertisementState::WaitingForReceiver;
+  QString statusDetail_ = QStringLiteral(
+      "Automatic discovery will start after the Windows TCP receiver is listening.");
   QString computerName_;
   QString serviceID_;
   DNS_SERVICE_REGISTER_REQUEST request_{};
+  DNS_SERVICE_CANCEL cancel_{};
   PDNS_SERVICE_INSTANCE instance_ = nullptr;
   RegistrationContext* context_ = nullptr;
   bool callbackPending_ = false;

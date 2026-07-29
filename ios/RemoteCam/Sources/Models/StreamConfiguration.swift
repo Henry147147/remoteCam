@@ -5,12 +5,50 @@ enum VideoCodec: String, CaseIterable, Codable, Sendable {
     case h264
 }
 
+enum StreamConfigurationError: LocalizedError, Equatable {
+    case invalidDimensions
+    case invalidFrameRate
+    case invalidBitrate
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidDimensions:
+            "The requested video dimensions are unsupported."
+        case .invalidFrameRate:
+            "The requested frame rate is unsupported."
+        case .invalidBitrate:
+            "The requested video bitrate is unsupported."
+        }
+    }
+}
+
 struct StreamConfiguration: Codable, Equatable, Sendable {
+    static let maximumDimension = 4_096
+    static let maximumPixelCount = 3_840 * 2_160
+    static let minimumBitrate = 64_000
+    static let maximumBitrate = 100_000_000
+
     var codec: VideoCodec
     var width: Int
     var height: Int
     var framesPerSecond: Int
     var bitrate: Int
+
+    func validated() throws -> StreamConfiguration {
+        guard width > 0, height > 0,
+              width <= Self.maximumDimension, height <= Self.maximumDimension,
+              width.isMultiple(of: 2), height.isMultiple(of: 2),
+              width <= Self.maximumPixelCount / height else {
+            throw StreamConfigurationError.invalidDimensions
+        }
+        guard (1...120).contains(framesPerSecond) else {
+            throw StreamConfigurationError.invalidFrameRate
+        }
+        guard (Self.minimumBitrate...Self.maximumBitrate).contains(bitrate) else {
+            throw StreamConfigurationError.invalidBitrate
+        }
+        return self
+    }
 
     static let default1080p = StreamConfiguration(
         codec: .hevc,
