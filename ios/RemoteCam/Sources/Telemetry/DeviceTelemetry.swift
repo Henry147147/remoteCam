@@ -50,7 +50,7 @@ final class DeviceTelemetry: ObservableObject {
     private func startMotion() {
         guard motion.isDeviceMotionAvailable else { return }
         motion.deviceMotionUpdateInterval = 0.2
-        motion.startDeviceMotionUpdates(to: OperationQueue()) { [weak self] motion, _ in
+        motion.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
             guard let self, let roll = motion?.attitude.roll else { return }
             let degrees = roll * 180 / .pi
             Task { @MainActor in self.applyMotionDegrees(degrees) }
