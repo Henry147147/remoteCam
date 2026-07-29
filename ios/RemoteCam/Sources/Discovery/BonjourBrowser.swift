@@ -10,32 +10,61 @@ final class BonjourBrowser: ObservableObject {
     private var browser: NWBrowser?
     private var endpointsByID: [String: NWEndpoint] = [:]
     private let queue = DispatchQueue(label: "org.remotecam.discovery")
+    private var generation = 0
 
     func start() {
         guard browser == nil else { return }
+        generation += 1
+        let currentGeneration = generation
+        errorMessage = nil
+        isSearching = true
         let parameters = NWParameters.tcp
         parameters.includePeerToPeer = true
         let browser = NWBrowser(for: .bonjour(type: "_remotecam._tcp", domain: nil), using: parameters)
         self.browser = browser
 
         browser.stateUpdateHandler = { [weak self] state in
-            Task { @MainActor in self?.handle(state) }
-        }
-        browser.browseResultsChangedHandler = { [weak self] results, _ in
-            let parsed = results.compactMap { result in Self.parse(result).map { ($0, result.endpoint) } }
             Task { @MainActor in
-                self?.endpointsByID = Dictionary(uniqueKeysWithValues: parsed.map { ($0.0.id, $0.1) })
-                self?.hosts = parsed.map(\.0).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                guard let self, self.generation == currentGeneration else { return }
+                self.handle(state)
             }
         }
-        isSearching = true
+        browser.browseResultsChangedHandler = { [weak self] results, _ in
+            var parsedByID: [String: (RemoteHost, NWEndpoint)] = [:]
+            for result in results {
+                guard let host = Self.parse(result) else { continue }
+                // The same PC can arrive through more than one active interface.
+                // Stable TXT identity wins; keeping one endpoint also prevents
+                // Dictionary(uniqueKeysWithValues:) from trapping on duplicates.
+                if parsedByID[host.id] == nil {
+                    parsedByID[host.id] = (host, result.endpoint)
+                }
+            }
+            let parsed = Array(parsedByID.values)
+            Task { @MainActor in
+                guard let self, self.generation == currentGeneration else { return }
+                self.endpointsByID = Dictionary(uniqueKeysWithValues: parsed.map { ($0.0.id, $0.1) })
+                self.hosts = parsed.map(\.0).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            }
+        }
         browser.start(queue: queue)
     }
 
-    func stop() {
-        browser?.cancel()
+    func restart() {
+        stop(clearResults: true)
+        start()
+    }
+
+    func stop(clearResults: Bool = false) {
+        generation += 1
+        let oldBrowser = browser
         browser = nil
+        oldBrowser?.cancel()
         isSearching = false
+        if clearResults {
+            hosts = []
+            endpointsByID = [:]
+        }
     }
 
     func endpoint(for host: RemoteHost) -> NWEndpoint? {
@@ -49,10 +78,13 @@ final class BonjourBrowser: ObservableObject {
             errorMessage = nil
         case .failed(let error):
             errorMessage = error.localizedDescription
-            stop()
+            stop(clearResults: true)
         case .cancelled:
             isSearching = false
-        case .setup, .waiting:
+        case .waiting(let error):
+            isSearching = true
+            errorMessage = "Waiting for local network access: \(error.localizedDescription)"
+        case .setup:
             break
         @unknown default:
             break
@@ -67,16 +99,7 @@ final class BonjourBrowser: ObservableObject {
             txt = metadata.dictionary
         }
 
-        guard txt["v"] == "1", let stableID = txt["id"], stableID.count == 16 else { return nil }
-        let caps = Set((txt["caps"] ?? "").split(separator: ",").map(String.init))
-        return RemoteHost(
-            id: stableID,
-            name: txt["name"] ?? serviceName,
-            hostname: serviceName,
-            port: 0,
-            capabilities: caps,
-            source: .bonjour
-        )
+        return RemoteHost.discovered(serviceName: serviceName, txt: txt)
     }
 
     deinit {

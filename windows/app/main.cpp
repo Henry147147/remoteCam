@@ -7,6 +7,7 @@
 #include <QUrl>
 #include <cstdlib>
 
+#include "bonjour_advertiser.h"
 #include "frame_producer.h"
 #include "rcwin/hr.h"
 
@@ -31,6 +32,7 @@ int main(int argc, char* argv[]) {
   const bool producerConflict = producerMutex && mutexError == ERROR_ALREADY_EXISTS;
 
   rcapp::FrameProducer producer;
+  rcapp::BonjourAdvertiser discovery;
   if (!producerMutex) {
     const HRESULT hr = rcwin::hrFromLastError();
     RC_ERR(L"CreateMutexW(%s) failed: %s", kProducerMutexName, rcwin::hrMessage(hr).c_str());
@@ -45,9 +47,11 @@ int main(int argc, char* argv[]) {
     RC_LOG(L"acquired per-session producer guard %s", kProducerMutexName);
     producer.start();
   }
+  discovery.start();
 
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty(QStringLiteral("frameProducer"), &producer);
+  engine.rootContext()->setContextProperty(QStringLiteral("lanDiscovery"), &discovery);
   const QUrl mainUrl(QStringLiteral("qrc:/RemoteCam/qml/Main.qml"));
   QObject::connect(
       &engine, &QQmlApplicationEngine::objectCreated, &app,

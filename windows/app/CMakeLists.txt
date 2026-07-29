@@ -10,6 +10,8 @@ if(RC_QT_CORE_TYPE STREQUAL "STATIC_LIBRARY")
 endif()
 
 qt_add_executable(rc-app
+    bonjour_advertiser.cpp
+    bonjour_advertiser.h
     main.cpp
     frame_producer.cpp
     frame_producer.h
@@ -27,6 +29,7 @@ target_link_libraries(rc-app PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     rcwin-common
+    dnsapi
 )
 
 target_compile_features(rc-app PRIVATE cxx_std_20)

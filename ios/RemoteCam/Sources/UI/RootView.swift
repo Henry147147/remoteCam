@@ -77,18 +77,27 @@ struct RootView: View {
 
     @ViewBuilder
     private var discoveredSection: some View {
-        Section("Nearby computers") {
+        Section {
             if model.discovery.hosts.isEmpty {
-                HStack {
-                    if model.discovery.isSearching { ProgressView() }
-                    Text(model.discovery.errorMessage ?? "Searching your local network…")
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        if model.discovery.isSearching { ProgressView() }
+                        Text(model.discovery.errorMessage ?? "Searching your local network…")
+                            .foregroundStyle(.secondary)
+                    }
+                    if model.discovery.errorMessage != nil && !model.discovery.isSearching {
+                        Button("Search again") { model.discovery.restart() }
+                    }
                 }
             } else {
                 ForEach(model.discovery.hosts) { host in
                     HostRow(host: host) { model.connect(to: host) }
                 }
             }
+        } header: {
+            Text("Nearby computers")
+        } footer: {
+            Text("Computers appear automatically through Bonjour. Use + to connect with an IP address and port when discovery is blocked by the network.")
         }
     }
 

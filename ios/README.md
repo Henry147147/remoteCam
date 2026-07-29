@@ -26,7 +26,8 @@ need that gem to build the app.
 
 ## Current implementation
 
-- Bonjour discovery, manual hosts, recent hosts, reconnect with exponential backoff
+- Bonjour discovery with validated Windows TXT identity, manual IP/port fallback,
+  recent hosts, duplicate-interface handling, and reconnect with exponential backoff
 - AVCapture multi-lens selection, 30/60 fps format negotiation, tap focus, zoom,
   exposure/ISO/EV, white balance, stabilization, and torch
 - Low-latency H.264/HEVC VideoToolbox encode with Annex-B parameter sets on every

@@ -5,7 +5,7 @@ import QtQuick.Layouts
 ApplicationWindow {
     id: root
     width: 620
-    height: 470
+    height: 650
     minimumWidth: 520
     minimumHeight: 420
     visible: true
@@ -78,6 +78,64 @@ ApplicationWindow {
                         color: "#b5c0d1"
                         font.pixelSize: 13
                         wrapMode: Text.WordWrap
+                    }
+                }
+            }
+        }
+
+        GroupBox {
+            id: discoveryGroup
+            title: "Local network discovery"
+            Layout.fillWidth: true
+
+            background: Rectangle {
+                color: "#121d2f"
+                radius: 14
+                border.color: "#24334c"
+            }
+
+            label: Label {
+                x: 14
+                text: discoveryGroup.title
+                color: "#d9e2ef"
+                font.bold: true
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 12
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: 5
+                    width: 10
+                    height: 10
+                    radius: 5
+                    color: lanDiscovery.state === 1 ? "#35d07f"
+                                                   : lanDiscovery.state === 2 ? "#ef6b73" : "#f6c453"
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Label {
+                        text: lanDiscovery.statusLabel
+                        color: "white"
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: lanDiscovery.statusDetail
+                        color: "#b5c0d1"
+                        font.pixelSize: 13
+                        wrapMode: Text.WordWrap
+                    }
+                    Label {
+                        text: "Manual address: " + lanDiscovery.computerName + ":" + lanDiscovery.port
+                        color: "#91a0b8"
+                        font.pixelSize: 12
                     }
                 }
             }

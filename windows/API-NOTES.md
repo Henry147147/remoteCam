@@ -140,3 +140,28 @@ frame. `FrameRing::readLatest` and `FrameSource::fill` both do this.
 the COM and Media Foundation headers first, or `cguid.h` fails to compile from inside
 the Windows SDK. `windows/vcam/media_source.h` has the working order; copy it rather
 than rediscovering this.
+
+## Bonjour advertisement and the Windows transport port
+
+The Qt app advertises `_remotecam._tcp.local` with the inbox Windows
+`DnsServiceRegister` API. It deliberately uses multicast DNS
+(`unicastEnabled = FALSE`); this matches iOS `NWBrowser` and does not require a Bonjour
+redistributable or Apple's restricted multicast entitlement.
+
+The current integration port is TCP **7890** (`BonjourAdvertiser::kDefaultPort`). The
+manual IP/port screen on iOS remains available and must use the same listener port.
+When the production Windows TCP receiver lands, it must bind that port (or pass its
+replacement port into the advertiser in the same change) and set `TCP_NODELAY` on
+accepted phone connections. Advertising a port and listening on a different one is a
+discovery failure even though both APIs report success.
+
+TXT fields are the protocol-defined `v`, `name`, `id`, and `caps`. `id` is persisted
+with `QSettings` under the current user and is exactly 16 lowercase hexadecimal
+characters, so renaming the PC or changing its IP does not create a new pairing
+identity. The registration is process-scoped; Windows removes it when the Qt app
+exits. The DNS callback returns on an arbitrary thread and must marshal UI state back
+to the Qt thread.
+
+The installer/backend still needs an inbound Windows Firewall rule for the TCP
+listener. DNS-SD can make the PC appear on the iPhone while a blocked TCP port makes
+connection attempts time out, so these are separate manual verification checks.
