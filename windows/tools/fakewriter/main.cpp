@@ -89,6 +89,23 @@ int wmain(int argc, wchar_t** argv) {
 
   ::SetConsoleCtrlHandler(consoleHandler, TRUE);
 
+  // The ring supports exactly one producer: writeFrame advances the write sequence with
+  // a plain read-modify-write, so two publishers interleave into the same slot and
+  // corrupt it silently. FrameRing does not enforce that today -- doing so would change
+  // open()'s contract, and the reasoning is recorded in windows/API-NOTES.md -- but the
+  // one way anybody is actually going to hit it is by running this tool twice, so guard
+  // it here where it costs nothing.
+  //
+  // Local\ rather than Global\: this is a per-session guard between instances of a
+  // user-mode tool, and Global\ would need a privilege the tool does not have.
+  HANDLE instanceGuard = ::CreateMutexW(nullptr, TRUE, L"Local\\RemoteCam.FakeWriter.Single");
+  if (!instanceGuard || ::GetLastError() == ERROR_ALREADY_EXISTS) {
+    std::wprintf(L"ERROR: another rc-fakewriter is already running.\n"
+                 L"The frame ring supports one producer; a second would corrupt it.\n");
+    if (instanceGuard) ::CloseHandle(instanceGuard);
+    return 1;
+  }
+
   const rcwin::Nv12Layout layout = rcwin::nv12Layout(width, height);
   std::vector<uint8_t> frame(layout.totalSize);
 
@@ -100,10 +117,12 @@ int wmain(int argc, wchar_t** argv) {
   // way rc-vcam.dll paces its own output.
   //
   // Sleep(1000/fps) would have been shorter, and wrong twice over: the default timer
-  // granularity is ~15.6 ms, so a requested 33 ms sleep actually lands nearer 47 ms
-  // (~21 fps), and the error accumulates because each sleep is relative to when the
-  // last one happened to wake. A tool whose entire job is to demonstrate that frames
-  // flow across the session boundary must not itself be the reason they look late.
+  // granularity is ~15.6 ms, so a requested 33 ms sleep overshoots, and the error
+  // accumulates because each sleep is relative to whenever the last one happened to
+  // wake. Measured on the dev box over 90 frames: Sleep(33) delivers 24.1 fps against a
+  // 30 fps target, while the loop below delivers 30.0. A tool whose entire job is to
+  // demonstrate that frames flow across the session boundary must not itself be the
+  // reason they look late.
   HANDLE timer = ::CreateWaitableTimerExW(nullptr, nullptr,
                                           CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
                                           TIMER_ALL_ACCESS);
@@ -187,6 +206,8 @@ int wmain(int argc, wchar_t** argv) {
   }
 
   ::CloseHandle(timer);
+  ::ReleaseMutex(instanceGuard);
+  ::CloseHandle(instanceGuard);
   std::wprintf(L"Stopped after %llu frames.\n", static_cast<unsigned long long>(frameIndex));
   return 0;
 }

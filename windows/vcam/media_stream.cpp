@@ -336,7 +336,11 @@ void MediaStream::ThreadMain() {
 
     LARGE_INTEGER due;
     due.QuadPart = -delta;  // negative == relative
-    if (!::SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) break;
+    if (!::SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) {
+      RC_ERR(L"SetWaitableTimer failed: %s",
+             rcwin::hrMessage(rcwin::hrFromLastError()).c_str());
+      break;
+    }
 
     const DWORD wait = ::WaitForMultipleObjects(2, waits, FALSE, INFINITE);
     if (wait == WAIT_OBJECT_0) break;  // stopEvent_
@@ -361,7 +365,16 @@ void MediaStream::ThreadMain() {
     if (!haveRequest) continue;
 
     ComPtr<IMFSample> sample;
-    if (FAILED(ProduceSample(frameIndex, ::MFGetSystemTime(), &sample))) continue;
+    if (FAILED(ProduceSample(frameIndex, ::MFGetSystemTime(), &sample))) {
+      // Put the request back at the front rather than dropping it. The token is the
+      // consumer's own correlation object; a request consumed without a sample is one
+      // the consumer waits on forever. Order is preserved, it retries on the next tick,
+      // and if the failure is permanent the queue cap in RequestSample eventually
+      // discards it rather than growing.
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (tokens_.size() < kMaxPendingRequests) tokens_.emplace_front(token);
+      continue;
+    }
 
     if (token) sample->SetUnknown(MFSampleExtension_Token, token.Get());
 

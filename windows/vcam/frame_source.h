@@ -43,6 +43,7 @@ class FrameSource {
   // thirty times a second.
   bool lastWasLive_ = false;
   bool everLogged_ = false;
+  bool mismatchLogged_ = false;
 };
 
 // How long a published frame stays usable before we fall back to the placeholder.

@@ -23,6 +23,7 @@ void FrameSource::stop() {
   ringReady_ = false;
   lastWasLive_ = false;
   everLogged_ = false;
+  mismatchLogged_ = false;  // warn again next session, not once per process lifetime
 }
 
 bool FrameSource::fill(uint8_t* dst, const rcwin::Nv12Layout& layout, uint64_t frameIndex) {
@@ -57,11 +58,14 @@ bool FrameSource::fill(uint8_t* dst, const rcwin::Nv12Layout& layout, uint64_t f
                       static_cast<size_t>(copyBytes));
         }
         live = true;
-      } else {
+      } else if (!mismatchLogged_) {
         // Geometry negotiation is an M2 concern; until the pipeline can rescale, a
         // mismatched producer is a configuration error worth saying out loud rather
-        // than silently showing a scrambled image.
-        RC_WARN(L"ring frame is %ux%u fourcc 0x%08X, expected %dx%d NV12 -- ignoring",
+        // than silently showing a scrambled image. Once, though -- the producer will
+        // keep publishing the wrong size thirty times a second until someone fixes it.
+        mismatchLogged_ = true;
+        RC_WARN(L"ring frame is %ux%u fourcc 0x%08X, expected %dx%d NV12 -- ignoring "
+                L"(further mismatches will not be logged)",
                 info.width, info.height, info.format, layout.width, layout.height);
       }
     }

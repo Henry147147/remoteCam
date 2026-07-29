@@ -249,7 +249,20 @@ int runMf(const std::wstring& name, int wanted, const std::wstring& outDir) {
   std::vector<FrameStat> frames;
   frames.reserve(static_cast<size_t>(wanted));
 
+  // Bounded on both attempts and wall clock. ReadSample legitimately returns a null
+  // sample for a stream tick, so "keep going until we have enough frames" spins
+  // forever against a source that ticks but never delivers -- which is precisely the
+  // failure this tool is most likely to be pointed at. A diagnostic that hangs on the
+  // fault it exists to diagnose is worse than useless.
+  const ULONGLONG deadline = ::GetTickCount64() + 10000 + static_cast<ULONGLONG>(wanted) * 100;
+  int emptyReads = 0;
+
   for (int i = 0; i < wanted;) {
+    if (::GetTickCount64() > deadline) {
+      std::wprintf(L"MF: timed out with %zu of %d frames\n", frames.size(), wanted);
+      break;
+    }
+
     DWORD streamIndex = 0, flags = 0;
     LONGLONG timestamp = 0;
     ComPtr<IMFSample> sample;
@@ -259,7 +272,16 @@ int runMf(const std::wstring& name, int wanted, const std::wstring& outDir) {
       break;
     }
     if (flags & MF_SOURCE_READERF_ENDOFSTREAM) break;
-    if (!sample) continue;  // a timeout tick, not a frame
+    if (!sample) {
+      // A stream tick carries no data. Counted so a source that only ticks is reported
+      // as such instead of pinning a core until the deadline.
+      if (++emptyReads > 1000) {
+        std::wprintf(L"MF: 1000 consecutive stream ticks with no sample; giving up\n");
+        break;
+      }
+      continue;
+    }
+    emptyReads = 0;
 
     ComPtr<IMFMediaBuffer> buffer;
     if (FAILED(sample->ConvertToContiguousBuffer(&buffer))) continue;

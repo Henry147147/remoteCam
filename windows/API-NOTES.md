@@ -71,8 +71,11 @@ second writer would start failing where it currently succeeds — so it belongs 
 own commit, with `open()`'s documentation updated and a test that a crashed producer
 does not lock the ring permanently.
 
-**Until then:** the app must ensure it is the only writer. A single-instance mutex in
-the Qt client covers the realistic case.
+**Until then, each producer guards itself.** `rc-fakewriter` holds
+`Local\RemoteCam.FakeWriter.Single` and refuses to start twice, which covers the one
+way anyone is realistically going to hit this. The Qt client will need the same when it
+lands. This is a guard per producer, not enforcement in the ring — two *different*
+producers would still collide.
 
 ---
 
@@ -108,6 +111,28 @@ Server's working set without limit. If a real consumer is ever observed to depen
 one-for-one delivery, raise the cap rather than removing it.
 
 ---
+
+## Everything in the DLL must hold a `ModuleLock`
+
+`DllCanUnloadNow` returning `S_OK` is a promise to COM that no code in `rc-vcam.dll` is
+still executing, and COM acts on it by unmapping the module. Any object that lives in
+the DLL but is not counted makes that promise a lie, and the Frame Server will unload
+the code a running thread is currently in — an access violation inside `svchost.exe`
+with no RemoteCam frame on the stack, because the frames belong to a module that no
+longer exists.
+
+`MediaSource`, `MediaStream` and the class factory each hold a `rcvcam::ModuleLock`
+declared as their **first** member, so it is constructed first and destroyed last.
+Anything new that is allocated here and handed across the COM boundary must do the
+same. See `windows/vcam/module_lock.h`.
+
+## Logs are capped and rotated
+
+`%ProgramData%\RemoteCam\logs\<tag>.log` is capped at 4 MB with one previous generation
+kept as `<tag>.log.1`. The DLL is loaded by a service that can stay up for weeks, so
+per-frame logging is a disk-consumption bug rather than a nuisance: warnings on any
+per-frame path must be edge-triggered, logging on the transition and not on every
+frame. `FrameRing::readLatest` and `FrameSource::fill` both do this.
 
 ## Include-order constraint
 

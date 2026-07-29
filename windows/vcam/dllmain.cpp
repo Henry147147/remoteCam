@@ -13,10 +13,23 @@
 #include "rcwin/guids.h"
 #include "rcwin/hr.h"
 #include "media_source.h"
+#include "module_lock.h"
 
 namespace {
 
 long g_objectCount = 0;
+
+}  // namespace
+
+namespace rcvcam {
+
+void moduleAddRef() { ::InterlockedIncrement(&g_objectCount); }
+void moduleRelease() { ::InterlockedDecrement(&g_objectCount); }
+long moduleRefCount() { return ::InterlockedCompareExchange(&g_objectCount, 0, 0); }
+
+}  // namespace rcvcam
+
+namespace {
 
 class ClassFactory final : public IClassFactory {
  public:
@@ -52,15 +65,17 @@ class ClassFactory final : public IClassFactory {
 
   IFACEMETHODIMP LockServer(BOOL lock) override {
     if (lock) {
-      ::InterlockedIncrement(&g_objectCount);
+      rcvcam::moduleAddRef();
     } else {
-      ::InterlockedDecrement(&g_objectCount);
+      rcvcam::moduleRelease();
     }
     return S_OK;
   }
 
  private:
   long refCount_ = 1;
+  // The factory itself lives in this module too, so it counts.
+  rcvcam::ModuleLock moduleLock_;
 };
 
 }  // namespace
@@ -103,5 +118,8 @@ _Check_return_ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid,
 }
 
 __control_entrypoint(DllExport) STDAPI DllCanUnloadNow() {
-  return ::InterlockedCompareExchange(&g_objectCount, 0, 0) == 0 ? S_OK : S_FALSE;
+  // S_OK here is a promise that nothing in this module is still executing. Every object
+  // the DLL hands out holds a ModuleLock for its whole lifetime, so this count is that
+  // promise rather than a guess -- see module_lock.h.
+  return rcvcam::moduleRefCount() == 0 ? S_OK : S_FALSE;
 }

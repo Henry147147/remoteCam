@@ -21,6 +21,7 @@
 #include <thread>
 
 #include "frame_source.h"
+#include "module_lock.h"
 
 namespace rcvcam {
 
@@ -68,6 +69,11 @@ class MediaStream final : public IMFMediaStream2 {
                      IMFAttributes* attributes);
   void ThreadMain();
   HRESULT ProduceSample(uint64_t frameIndex, LONGLONG timestamp, IMFSample** out);
+
+  // A consumer may hold the stream after releasing the source, so the stream keeps the
+  // module alive in its own right rather than relying on the source to do it. Declared
+  // first so it outlives the thread below.
+  ModuleLock moduleLock_;
 
   mutable std::mutex mutex_;
   long refCount_ = 1;

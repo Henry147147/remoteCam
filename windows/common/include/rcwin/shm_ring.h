@@ -147,6 +147,9 @@ class FrameRing {
   HANDLE event_ = nullptr;
   void* view_ = nullptr;
   bool owner_ = false;
+  // Edge-triggers the "implausible geometry" warning so a producer stuck publishing bad
+  // frames logs once rather than at frame rate.
+  bool rejectedLogged_ = false;
 };
 
 }  // namespace rcwin

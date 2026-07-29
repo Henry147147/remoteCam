@@ -13,6 +13,7 @@ std::mutex g_mutex;
 std::wstring g_tag = L"rc";
 HANDLE g_file = INVALID_HANDLE_VALUE;
 bool g_fileTried = false;
+LONGLONG g_written = 0;
 
 const wchar_t* levelName(LogLevel level) {
   switch (level) {
@@ -45,6 +46,29 @@ std::wstring logDirectory() {
   return dir;
 }
 
+// Cap for a single log generation. rc-vcam.dll is loaded by a service that can stay up
+// for weeks, so an append-only file with no ceiling is an unbounded disk consumer on
+// the user's system drive -- a slow-motion bug that only shows up long after anyone is
+// still looking at this code.
+constexpr LONGLONG kMaxLogBytes = 4 * 1024 * 1024;
+
+// One previous generation is kept. Two files bound the disk cost at 8 MB while still
+// leaving the run *before* the interesting one available, which is usually where the
+// cause of a Session 0 failure actually is.
+void rotateIfLarge(const std::wstring& path) {
+  WIN32_FILE_ATTRIBUTE_DATA info{};
+  if (!::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &info)) return;
+
+  LARGE_INTEGER size;
+  size.HighPart = static_cast<LONG>(info.nFileSizeHigh);
+  size.LowPart = info.nFileSizeLow;
+  if (size.QuadPart < kMaxLogBytes) return;
+
+  const std::wstring previous = path + L".1";
+  ::DeleteFileW(previous.c_str());
+  ::MoveFileW(path.c_str(), previous.c_str());
+}
+
 // Opened lazily and at most once. A failure here is silent on purpose: logging must
 // never be the reason a media source fails to start.
 void ensureFile() {
@@ -55,11 +79,19 @@ void ensureFile() {
   if (dir.empty()) return;
 
   std::wstring path = dir + L"\\" + g_tag + L".log";
+  rotateIfLarge(path);
+
   HANDLE h = ::CreateFileW(path.c_str(), FILE_APPEND_DATA,
                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (h == INVALID_HANDLE_VALUE) return;
   g_file = h;
+
+  // Seeded from what is already on disk rather than zero, so the cap bounds the file
+  // itself and not merely this process's contribution to it. Appending 4 MB to a file
+  // that already held 3.9 MB would otherwise double the intended ceiling.
+  LARGE_INTEGER existing{};
+  if (::GetFileSizeEx(h, &existing)) g_written = existing.QuadPart;
 }
 
 void writeFile(const wchar_t* text) {
@@ -74,6 +106,18 @@ void writeFile(const wchar_t* text) {
 
   DWORD written = 0;
   ::WriteFile(g_file, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr);
+
+  // Rotation is also checked here, not only at open. rc-vcam.dll can stay loaded for
+  // the whole uptime of the Frame Server, so a check that only runs once per load would
+  // never fire on exactly the long-running process that needs it. Closing and clearing
+  // the "tried" flag makes the next write reopen through ensureFile, which rotates.
+  g_written += written;
+  if (g_written >= kMaxLogBytes) {
+    ::CloseHandle(g_file);
+    g_file = INVALID_HANDLE_VALUE;
+    g_fileTried = false;
+    g_written = 0;
+  }
 }
 
 }  // namespace

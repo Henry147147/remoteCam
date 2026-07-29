@@ -27,6 +27,7 @@
 #include <mutex>
 
 #include "media_stream.h"
+#include "module_lock.h"
 
 namespace rcvcam {
 
@@ -95,6 +96,10 @@ class MediaSource final : public IMFMediaSourceEx,
 
   HRESULT Initialize();
   HRESULT CheckShutdown() const;
+
+  // Declared first so it is destroyed last: the module must outlive every other member
+  // of this object, including the stream and its thread.
+  ModuleLock moduleLock_;
 
   mutable std::mutex mutex_;
   long refCount_ = 1;

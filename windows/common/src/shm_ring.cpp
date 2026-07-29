@@ -342,9 +342,20 @@ HRESULT FrameRing::readLatest(uint8_t* dst, uint32_t dstCapacity, FrameInfo& inf
     // Checked before the copy, so a nonsensical frame costs nothing and -- more to the
     // point -- is never handed to a caller that would act on its stride.
     if (!geometryIsSane(candidate)) {
-      RC_WARN(L"rejecting frame with implausible geometry: %ux%u stride %u, %u bytes",
-              candidate.width, candidate.height, candidate.stride, candidate.bytesUsed);
+      // Logged on the transition only. A producer stuck publishing bad geometry does so
+      // at frame rate, and thirty identical lines a second would bury the surrounding
+      // context and churn through the log's size cap in minutes.
+      if (!rejectedLogged_) {
+        rejectedLogged_ = true;
+        RC_WARN(L"rejecting frames with implausible geometry: %ux%u stride %u, %u bytes",
+                candidate.width, candidate.height, candidate.stride, candidate.bytesUsed);
+      }
       return S_FALSE;
+    }
+    if (rejectedLogged_) {
+      rejectedLogged_ = false;
+      RC_LOG(L"frame geometry is valid again (%ux%u stride %u)", candidate.width,
+             candidate.height, candidate.stride);
     }
 
     std::memcpy(dst, slotOf(view_, slot), bytes);
@@ -367,7 +378,13 @@ uint64_t FrameRing::millisSinceLastWrite() const {
 
   const uint64_t last = h->lastWriteQpc.load(std::memory_order_relaxed);
   const uint64_t now = qpcNow();
-  if (now <= last) return 0;
+
+  // A timestamp in the future is not possible from a correct producer, and this field
+  // lives in memory any interactive user can write. Treating it as "just published"
+  // would let a bogus value pin the source permanently on a stale frame, suppressing
+  // the placeholder that is supposed to appear when a producer dies. Fail towards
+  // stale: it is the state that degrades safely.
+  if (now < last) return UINT64_MAX;
   return (now - last) * 1000ull / qpcFrequency();
 }
 
