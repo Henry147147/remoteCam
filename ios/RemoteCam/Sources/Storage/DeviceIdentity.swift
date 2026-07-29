@@ -7,11 +7,24 @@ enum DeviceIdentity {
     private static let fallbackDefaultsKey = "deviceIdentityFallback"
 
     static func loadOrCreate() -> String {
-        if let existing = read() { return existing }
-        if let fallback = UserDefaults.standard.string(forKey: fallbackDefaultsKey) { return fallback }
+        if let existing = read(), isValid(existing) { return existing }
+        if let fallback = UserDefaults.standard.string(forKey: fallbackDefaultsKey),
+           isValid(fallback) {
+            return fallback
+        }
         let id = (0..<8).map { _ in String(format: "%02x", UInt8.random(in: .min ... .max)) }.joined()
-        if !store(id) { UserDefaults.standard.set(id, forKey: fallbackDefaultsKey) }
+        if store(id) {
+            UserDefaults.standard.removeObject(forKey: fallbackDefaultsKey)
+        } else {
+            UserDefaults.standard.set(id, forKey: fallbackDefaultsKey)
+        }
         return id
+    }
+
+    private static func isValid(_ value: String) -> Bool {
+        value.utf8.count == 16 && value.utf8.allSatisfy {
+            (48...57).contains($0) || (97...102).contains($0)
+        }
     }
 
     private static func read() -> String? {

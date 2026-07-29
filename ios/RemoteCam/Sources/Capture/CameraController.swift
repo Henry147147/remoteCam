@@ -96,7 +96,7 @@ final class CameraController: ObservableObject {
         let reason = reasonValue.flatMap(AVCaptureSession.InterruptionReason.init(rawValue:))
         switch reason {
         case .videoDeviceNotAvailableInBackground:
-            interruptionMessage = "Camera access was interrupted in the background. Keep RemoteCam visible on iOS 17; iOS 18 and newer support background capture."
+            interruptionMessage = "Camera access was interrupted in the background. Keep RemoteCam visible on iOS 17; supported iOS 18 and newer devices can continue capture."
         case .videoDeviceInUseByAnotherClient:
             interruptionMessage = "Another app is using the camera."
         default:

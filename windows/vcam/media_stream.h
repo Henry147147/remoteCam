@@ -76,10 +76,15 @@ class MediaStream final : public IMFMediaStream2 {
   ModuleLock moduleLock_;
 
   mutable std::mutex mutex_;
+  // Start/Stop perform work outside mutex_ (thread join and ring teardown). Serialise
+  // those transitions separately so concurrent Media Foundation lifecycle calls
+  // cannot both join the same std::thread or start after a completed Stop.
+  std::mutex lifecycleMutex_;
   long refCount_ = 1;
   bool shutdown_ = false;
   bool running_ = false;
   bool requestOverflowLogged_ = false;
+  bool sampleFailureLogged_ = false;
 
   Microsoft::WRL::ComPtr<IMFMediaEventQueue> eventQueue_;
   Microsoft::WRL::ComPtr<IMFStreamDescriptor> descriptor_;

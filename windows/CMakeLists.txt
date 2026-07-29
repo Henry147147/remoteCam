@@ -30,8 +30,22 @@ add_subdirectory(vcam)        # rc-vcam.dll      MF media source, loaded in Sess
 add_subdirectory(register)    # rc-vcam-register.exe
 add_subdirectory(tools)       # rc-vcam-probe, rc-fakewriter
 
+# The M1 virtual-camera targets intentionally build without Qt, because the Windows
+# bring-up box and CI only need the SDK. Build the desktop producer when a dynamic Qt 6
+# installation is available, but do not make that an artificial dependency of the DLL.
+option(RC_BUILD_QT_APP "Build the Qt 6 / QML RemoteCam producer" ON)
+if(RC_BUILD_QT_APP)
+    find_package(Qt6 6.2 QUIET COMPONENTS Quick QuickControls2)
+    if(Qt6_FOUND)
+        add_subdirectory(app)
+    else()
+        message(STATUS
+            "Qt 6 Quick/QuickControls2 not found; skipping rc-app. "
+            "Set CMAKE_PREFIX_PATH to a dynamic Qt 6 installation to build it.")
+    endif()
+endif()
+
 # Not started yet -- uncomment as each lands.
 # add_subdirectory(platform)  # D3D11 pipeline, FFmpeg decode, effects, SHM writer
-# add_subdirectory(app)       # Qt 6 / QML client
 # add_subdirectory(obs-plugin)
 # add_subdirectory(installer)

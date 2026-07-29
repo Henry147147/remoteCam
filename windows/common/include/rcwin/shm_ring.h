@@ -21,11 +21,12 @@
 //
 // CONCURRENCY
 //
-// A seqlock per slot, so the writer never blocks and never waits on a reader. The
+// A seqlock per slot, so the writer never waits on a reader. A non-blocking named
+// mutex serialises the write with the rare consumer-generation transition and also
+// prevents two unsupported producers from corrupting the sequence counters. The
 // writer marks a slot odd, fills it, marks it even; a reader that sees an odd sequence
 // or a sequence that moved under it discards the read and retries against whatever is
-// current. Dropping a frame is always better than stalling the Frame Server, which
-// shows up to the user as their whole video call freezing.
+// current. Dropping a frame is always better than stalling the Frame Server.
 
 #ifndef RCWIN_SHM_RING_H
 #define RCWIN_SHM_RING_H
@@ -37,7 +38,7 @@
 namespace rcwin {
 
 inline constexpr uint32_t kRingMagic = 0x4D414352u;    // "RCAM"
-inline constexpr uint32_t kRingVersion = 1u;
+inline constexpr uint32_t kRingVersion = 2u;
 inline constexpr uint32_t kRingSlots = 4u;
 inline constexpr uint32_t kFourccNv12 = 0x3231564Eu;   // "NV12"
 
@@ -63,6 +64,7 @@ struct FrameInfo {
 struct RingNames {
   const wchar_t* section;
   const wchar_t* event;
+  const wchar_t* writeGuard;
 };
 
 // The real objects, in the Global\ namespace, as described above.
@@ -107,11 +109,10 @@ class FrameRing {
 
   // Publishes a frame. Never blocks. `bytes` must not exceed kRingSlotBytes.
   //
-  // EXACTLY ONE PRODUCER. writeFrame advances the write sequence with a plain
-  // read-modify-write, so two processes publishing at once will interleave into the
-  // same slot and corrupt it. Nothing enforces this today -- see
-  // windows/API-NOTES.md for the enforcement mechanism that was considered and
-  // deferred, since adding it would change this class's contract.
+  // EXACTLY ONE LOGICAL PRODUCER. The named write guard prevents two processes from
+  // corrupting a slot or losing a sequence update, but it cannot decide which stream
+  // should win: simultaneous producers would still interleave unrelated frames.
+  // Applications therefore enforce their own per-session single-instance guard.
   //
   // Geometry in `info` is recorded as given and NOT validated here. That asymmetry is
   // deliberate: a hostile producer would map the section and write it directly rather
@@ -145,8 +146,10 @@ class FrameRing {
 
   HANDLE section_ = nullptr;
   HANDLE event_ = nullptr;
+  HANDLE writeGuard_ = nullptr;
   void* view_ = nullptr;
   bool owner_ = false;
+  uint32_t consumerGeneration_ = 0;
   // Edge-triggers the "implausible geometry" warning so a producer stuck publishing bad
   // frames logs once rather than at frame rate.
   bool rejectedLogged_ = false;

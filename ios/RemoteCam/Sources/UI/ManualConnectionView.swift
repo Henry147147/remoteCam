@@ -31,12 +31,15 @@ struct ManualConnectionView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Connect") {
-                        guard let parsedPort = UInt16(port) else { return }
+                        guard let parsedPort = UInt16(port), parsedPort > 0 else { return }
                         let host = RemoteHost.manual(hostname: hostname, port: parsedPort)
                         dismiss()
                         connect(host)
                     }
-                    .disabled(hostname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || UInt16(port) == nil)
+                    .disabled(
+                        hostname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || UInt16(port).map { $0 > 0 } != true
+                    )
                 }
             }
         }

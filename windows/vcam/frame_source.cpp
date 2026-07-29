@@ -48,14 +48,29 @@ bool FrameSource::fill(uint8_t* dst, const rcwin::Nv12Layout& layout, uint64_t f
         const int copyBytes = std::min(src.stride, layout.stride);
 
         for (int row = 0; row < layout.height; ++row) {
-          std::memcpy(dst + static_cast<size_t>(row) * layout.stride,
+          uint8_t* destination = dst + static_cast<size_t>(row) * layout.stride;
+          std::memcpy(destination,
                       scratch.data() + static_cast<size_t>(row) * src.stride,
                       static_cast<size_t>(copyBytes));
+          if (copyBytes < layout.stride) {
+            std::memset(destination + copyBytes, 16,
+                        static_cast<size_t>(layout.stride - copyBytes));
+          }
         }
         for (int row = 0; row < layout.height / 2; ++row) {
-          std::memcpy(dst + layout.uvOffset + static_cast<size_t>(row) * layout.stride,
+          uint8_t* destination =
+              dst + layout.uvOffset + static_cast<size_t>(row) * layout.stride;
+          std::memcpy(destination,
                       scratch.data() + src.uvOffset + static_cast<size_t>(row) * src.stride,
                       static_cast<size_t>(copyBytes));
+          if (copyBytes < layout.stride) {
+            std::memset(destination + copyBytes, 128,
+                        static_cast<size_t>(layout.stride - copyBytes));
+          }
+        }
+        if (mismatchLogged_) {
+          mismatchLogged_ = false;
+          RC_LOG(L"ring frame format matches the virtual camera again");
         }
         live = true;
       } else if (!mismatchLogged_) {

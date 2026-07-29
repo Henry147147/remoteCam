@@ -126,6 +126,16 @@ declared as their **first** member, so it is constructed first and destroyed las
 Anything new that is allocated here and handed across the COM boundary must do the
 same. See `windows/vcam/module_lock.h`.
 
+## Frame-ring lifetime is explicit
+
+Ring version 2 adds a camera-consumer count, generation, and named write guard. A
+producer's mapping handle keeps the kernel object alive after the virtual camera
+closes, so handle validity alone cannot mean “connected.” `FrameRing::writeFrame`
+now fails when its consumer generation disappears or changes; the Qt producer must
+close that stale handle and return to polling. The write guard uses a zero timeout on
+the frame path, preserving the non-blocking producer contract while serializing the
+rare close/reopen transition.
+
 ## Logs are capped and rotated
 
 `%ProgramData%\RemoteCam\logs\<tag>.log` is capped at 4 MB with one previous generation
@@ -140,3 +150,30 @@ frame. `FrameRing::readLatest` and `FrameSource::fill` both do this.
 the COM and Media Foundation headers first, or `cguid.h` fails to compile from inside
 the Windows SDK. `windows/vcam/media_source.h` has the working order; copy it rather
 than rediscovering this.
+
+## Bonjour advertisement and the Windows transport port
+
+The Qt app can advertise `_remotecam._tcp.local` with the inbox Windows
+`DnsServiceRegister` API. It deliberately uses multicast DNS
+(`unicastEnabled = FALSE`); this matches iOS `NWBrowser` and does not require a Bonjour
+redistributable or Apple's restricted multicast entitlement.
+
+The current integration port is TCP **7890** (`BonjourAdvertiser::kDefaultPort`). The
+manual IP/port screen on iOS remains available and must use the same listener port.
+The Qt shell deliberately remains in **Waiting for network receiver** and does not call
+`BonjourAdvertiser::start()` yet: there is no TCP receiver in this repository, and
+advertising a closed port is a false-success discovery failure. When the production
+Windows receiver lands, it must bind that port, set `TCP_NODELAY` on accepted phone
+connections, and only then call `start()` (or pass a replacement bound port into the
+advertiser in the same change).
+
+TXT fields are the protocol-defined `v`, `name`, `id`, and `caps`. `id` is persisted
+with `QSettings` under the current user and is exactly 16 lowercase hexadecimal
+characters, so renaming the PC or changing its IP does not create a new pairing
+identity. The registration is process-scoped; Windows removes it when the Qt app
+exits. The DNS callback returns on an arbitrary thread and must marshal UI state back
+to the Qt thread.
+
+The installer/backend still needs an inbound Windows Firewall rule for the TCP
+listener. DNS-SD can make the PC appear on the iPhone while a blocked TCP port makes
+connection attempts time out, so these are separate manual verification checks.

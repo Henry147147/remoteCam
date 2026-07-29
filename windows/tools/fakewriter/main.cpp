@@ -18,6 +18,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 #include "rcwin/hr.h"
@@ -53,6 +54,12 @@ int usage() {
   return 2;
 }
 
+LONGLONG qpcTo100ns(LONGLONG ticks, LONGLONG frequency) {
+  const LONGLONG wholeSeconds = ticks / frequency;
+  const LONGLONG remainder = ticks % frequency;
+  return wholeSeconds * 10000000LL + remainder * 10000000LL / frequency;
+}
+
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
@@ -79,11 +86,13 @@ int wmain(int argc, wchar_t** argv) {
     }
   }
 
-  if (width <= 0 || height <= 0 || fps <= 0 ||
+  if (width <= 0 || height <= 0 || (width & 1) != 0 || (height & 1) != 0 ||
+      fps <= 0 || fps > 240 || limit < -1 ||
       static_cast<unsigned>(width) > rcwin::kRingMaxWidth ||
       static_cast<unsigned>(height) > rcwin::kRingMaxHeight) {
-    std::wprintf(L"ERROR: geometry out of range (max %ux%u)\n", rcwin::kRingMaxWidth,
-                 rcwin::kRingMaxHeight);
+    std::wprintf(L"ERROR: dimensions must be positive and even (max %ux%u), fps must "
+                 L"be 1..240, and --frames must be non-negative.\n",
+                 rcwin::kRingMaxWidth, rcwin::kRingMaxHeight);
     return 1;
   }
 
@@ -91,10 +100,9 @@ int wmain(int argc, wchar_t** argv) {
 
   // The ring supports exactly one producer: writeFrame advances the write sequence with
   // a plain read-modify-write, so two publishers interleave into the same slot and
-  // corrupt it silently. FrameRing does not enforce that today -- doing so would change
-  // open()'s contract, and the reasoning is recorded in windows/API-NOTES.md -- but the
-  // one way anybody is actually going to hit it is by running this tool twice, so guard
-  // it here where it costs nothing.
+  // interleave unrelated streams even though FrameRing's write guard now prevents
+  // memory corruption. The one way anybody is actually going to hit it is by running
+  // this tool twice, so guard it here where it costs nothing.
   //
   // Local\ rather than Global\: this is a per-session guard between instances of a
   // user-mode tool, and Global\ would need a privilege the tool does not have.
@@ -130,24 +138,40 @@ int wmain(int argc, wchar_t** argv) {
   if (!timer) {
     std::wprintf(L"CreateWaitableTimerEx failed: %s\n",
                  rcwin::hrMessage(rcwin::hrFromLastError()).c_str());
+    ::ReleaseMutex(instanceGuard);
+    ::CloseHandle(instanceGuard);
     return 1;
   }
 
   const LONGLONG intervalTicks = 10000000LL / fps;  // 100 ns units
   LARGE_INTEGER originQpc{};
-  ::QueryPerformanceCounter(&originQpc);
   LARGE_INTEGER qpcFreq{};
-  ::QueryPerformanceFrequency(&qpcFreq);
+  if (!::QueryPerformanceFrequency(&qpcFreq) || qpcFreq.QuadPart <= 0 ||
+      !::QueryPerformanceCounter(&originQpc)) {
+    std::wprintf(L"High-resolution performance counter is unavailable.\n");
+    ::CloseHandle(timer);
+    ::ReleaseMutex(instanceGuard);
+    ::CloseHandle(instanceGuard);
+    return 1;
+  }
 
   bool announced = false;
   uint64_t frameIndex = 0;
   uint64_t tick = 0;
 
-  while (!g_stop) {
+  int exitCode = 0;
+  while (!g_stop && (limit < 0 || static_cast<long long>(frameIndex) < limit)) {
     if (!ring.valid()) {
       // ERROR_FILE_NOT_FOUND here just means no application currently has the camera
       // open. Poll at a human pace: this is a person opening Zoom, not a hot path.
-      if (FAILED(ring.open(true))) {
+      const HRESULT openHr = ring.open(true);
+      if (FAILED(openHr)) {
+        if (openHr != HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+          std::wprintf(L"FrameRing::open failed: %s\n",
+                       rcwin::hrMessage(openHr).c_str());
+          exitCode = 1;
+          break;
+        }
         if (announced) {
           std::wprintf(L"Ring went away (camera closed). Waiting...\n");
           announced = false;
@@ -160,7 +184,11 @@ int wmain(int argc, wchar_t** argv) {
       // Restart the schedule from here. The ring can be closed for minutes while nobody
       // has the camera open; carrying the old origin across that gap would leave the
       // timer owing hundreds of frames and publish them back-to-back on reconnect.
-      ::QueryPerformanceCounter(&originQpc);
+      if (!::QueryPerformanceCounter(&originQpc)) {
+        std::wprintf(L"QueryPerformanceCounter failed.\n");
+        exitCode = 1;
+        break;
+      }
       tick = 0;
     }
 
@@ -172,42 +200,66 @@ int wmain(int argc, wchar_t** argv) {
     info.stride = static_cast<uint32_t>(layout.stride);
     info.format = rcwin::kFourccNv12;
     info.ptsMicros = ::GetTickCount64() * 1000ull;
+    info.bytesUsed = static_cast<uint32_t>(layout.totalSize);
 
     const HRESULT hr =
         ring.writeFrame(frame.data(), static_cast<uint32_t>(layout.totalSize), info);
     if (FAILED(hr)) {
-      std::wprintf(L"writeFrame failed: %s\n", rcwin::hrMessage(hr).c_str());
-      ring.close();
-      announced = false;
-      ::Sleep(250);
-      continue;
+      if (hr == HRESULT_FROM_WIN32(ERROR_TIMEOUT)) {
+        // The frame path is deliberately non-blocking; pace this dropped frame below.
+      } else if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+        if (announced) std::wprintf(L"Ring went away (camera closed). Waiting...\n");
+        ring.close();
+        announced = false;
+        ::Sleep(250);
+        continue;
+      } else {
+        std::wprintf(L"writeFrame failed: %s\n", rcwin::hrMessage(hr).c_str());
+        exitCode = 1;
+        break;
+      }
     }
 
-    ++frameIndex;
-    if (frameIndex % (static_cast<uint64_t>(fps) * 2) == 0) {
-      std::wprintf(L"  published %llu frames\n", static_cast<unsigned long long>(frameIndex));
+    if (SUCCEEDED(hr)) {
+      ++frameIndex;
+      if (frameIndex % (static_cast<uint64_t>(fps) * 2) == 0) {
+        std::wprintf(L"  published %llu frames\n",
+                     static_cast<unsigned long long>(frameIndex));
+      }
     }
-    if (limit > 0 && static_cast<long long>(frameIndex) >= limit) break;
-
     // Scheduled from a fixed origin rather than "now + interval", so a late wake-up
     // does not push every subsequent frame later.
     ++tick;
     LARGE_INTEGER now{};
-    ::QueryPerformanceCounter(&now);
+    if (!::QueryPerformanceCounter(&now)) {
+      std::wprintf(L"QueryPerformanceCounter failed.\n");
+      exitCode = 1;
+      break;
+    }
     const LONGLONG elapsed100ns =
-        (now.QuadPart - originQpc.QuadPart) * 10000000LL / qpcFreq.QuadPart;
+        qpcTo100ns(now.QuadPart - originQpc.QuadPart, qpcFreq.QuadPart);
     LONGLONG delta = static_cast<LONGLONG>(tick) * intervalTicks - elapsed100ns;
     if (delta < 0) delta = 0;
 
     LARGE_INTEGER due;
     due.QuadPart = -delta;  // negative == relative
-    if (!::SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) break;
-    if (::WaitForSingleObject(timer, INFINITE) != WAIT_OBJECT_0) break;
+    if (!::SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) {
+      std::wprintf(L"SetWaitableTimer failed: %s\n",
+                   rcwin::hrMessage(rcwin::hrFromLastError()).c_str());
+      exitCode = 1;
+      break;
+    }
+    if (::WaitForSingleObject(timer, INFINITE) != WAIT_OBJECT_0) {
+      std::wprintf(L"WaitForSingleObject failed: %s\n",
+                   rcwin::hrMessage(rcwin::hrFromLastError()).c_str());
+      exitCode = 1;
+      break;
+    }
   }
 
   ::CloseHandle(timer);
   ::ReleaseMutex(instanceGuard);
   ::CloseHandle(instanceGuard);
   std::wprintf(L"Stopped after %llu frames.\n", static_cast<unsigned long long>(frameIndex));
-  return 0;
+  return exitCode;
 }

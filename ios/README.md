@@ -26,7 +26,8 @@ need that gem to build the app.
 
 ## Current implementation
 
-- Bonjour discovery, manual hosts, recent hosts, reconnect with exponential backoff
+- Bonjour discovery with validated Windows TXT identity, manual IP/port fallback,
+  recent hosts, duplicate-interface handling, and reconnect with exponential backoff
 - AVCapture multi-lens selection, 30/60 fps format negotiation, tap focus, zoom,
   exposure/ISO/EV, white balance, stabilization, and torch
 - Low-latency H.264/HEVC VideoToolbox encode with Annex-B parameter sets on every
@@ -41,9 +42,8 @@ decisions are tracked in [`docs/ios-backend-handoff.md`](../docs/ios-backend-han
 
 ## Device verification
 
-On 2026-07-28 the app and Live Activity extension compiled successfully against the
-iPhoneOS 26 SDK. A clean signed install could not be produced because this Xcode
-installation has no signed-in developer account/provisioning profile, and the
-connected phone also has Developer Mode disabled. Capture, hardware encoding,
-background operation, and sustained thermal behavior therefore remain unverified on
-hardware; an unsigned device-SDK build is not reported as a successful device run.
+On 2026-07-28 the app and Live Activity extension built and signed successfully
+against the iPhoneOS 27 SDK using the beta Xcode toolchain. That build was installed
+and launched on a physical iPhone. This confirms signing, installation, and startup
+only: camera capture, hardware encoding, background operation, sustained thermal
+behavior, and the live Windows-consumer matrix still require manual verification.

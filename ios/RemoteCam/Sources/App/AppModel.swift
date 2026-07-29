@@ -19,6 +19,7 @@ final class AppModel: ObservableObject {
     @Published var streamError: String?
     private var currentConfiguration: StreamConfiguration?
     private var lastTelemetry: DeviceTelemetrySnapshot?
+    private var streamGeneration = 0
 
     init() {
         let encoder = self.encoder
@@ -30,10 +31,22 @@ final class AppModel: ObservableObject {
             if case .reconnecting(let host, _) = phase, let configuration = currentConfiguration {
                 Task { await liveActivity.update(host: host, configuration: configuration, status: "Reconnecting") }
             }
+            if case .failed = phase {
+                stopCaptureAfterSessionEnded()
+            } else if case .idle = phase, currentConfiguration != nil {
+                stopCaptureAfterSessionEnded()
+            }
         }
         remoteSession.onReady = { [weak self] configuration in
             guard let self else { return }
-            Task { await self.startStreaming(configuration: configuration) }
+            streamGeneration &+= 1
+            let generation = streamGeneration
+            Task {
+                await self.startStreaming(
+                    configuration: configuration,
+                    generation: generation
+                )
+            }
         }
         remoteSession.onTargetBitrate = { [weak encoder] bitrate in encoder?.updateBitrate(bitrate) }
         remoteSession.onControl = { [weak self] message in self?.handle(message) }
@@ -54,7 +67,7 @@ final class AppModel: ObservableObject {
         let endpoint: NWEndpoint?
         if host.source == .bonjour || (host.source == .recent && host.port == 0) {
             endpoint = discovery.endpoint(for: host)
-        } else if let port = NWEndpoint.Port(rawValue: host.port) {
+        } else if host.port > 0, let port = NWEndpoint.Port(rawValue: host.port) {
             endpoint = .hostPort(host: NWEndpoint.Host(host.hostname), port: port)
         } else {
             endpoint = nil
@@ -67,7 +80,20 @@ final class AppModel: ObservableObject {
     }
 
     func disconnect() {
+        streamGeneration &+= 1
         remoteSession.disconnect()
+        encoder.invalidate()
+        currentConfiguration = nil
+        streamError = nil
+        UIApplication.shared.isIdleTimerDisabled = false
+        Task {
+            await camera.stop()
+            await liveActivity.end()
+        }
+    }
+
+    private func stopCaptureAfterSessionEnded() {
+        streamGeneration &+= 1
         encoder.invalidate()
         currentConfiguration = nil
         UIApplication.shared.isIdleTimerDisabled = false
@@ -104,11 +130,23 @@ final class AppModel: ObservableObject {
         applyCameraUpdate(CameraControlUpdate(focusPointX: point.x, focusPointY: point.y))
     }
 
-    private func startStreaming(configuration: StreamConfiguration) async {
+    private func startStreaming(
+        configuration: StreamConfiguration,
+        generation: Int
+    ) async {
         do {
+            guard generation == streamGeneration else { return }
+            let configuration = try configuration.validated()
             try encoder.configure(configuration)
-            try await camera.prepare(configuration: configuration)
+            do {
+                try await camera.prepare(configuration: configuration)
+            } catch {
+                encoder.invalidate()
+                throw error
+            }
+            guard generation == streamGeneration else { return }
             currentConfiguration = configuration
+            streamError = nil
             remoteSession.sendControl(.capabilities(camera.capabilities))
             remoteSession.sendControl(.cameraState(camera.controls))
             if let host = connectionPhase.host {
@@ -119,6 +157,12 @@ final class AppModel: ObservableObject {
             remoteSession.markStreaming(configuration: configuration)
             sendTelemetry(telemetry.snapshot, force: true)
         } catch {
+            guard generation == streamGeneration else { return }
+            encoder.invalidate()
+            await camera.stop()
+            currentConfiguration = nil
+            UIApplication.shared.isIdleTimerDisabled = false
+            remoteSession.disconnect()
             streamError = error.localizedDescription
             connectionPhase = .failed(error.localizedDescription)
         }
@@ -140,7 +184,9 @@ final class AppModel: ObservableObject {
             }
         case "set_format":
             guard let configuration = configuration(from: message.fields) else { return }
-            Task { await reconfigure(configuration) }
+            streamGeneration &+= 1
+            let generation = streamGeneration
+            Task { await reconfigure(configuration, generation: generation) }
         case "set_control":
             let update = CameraControlUpdate(
                 zoom: message.fields["zoom"]?.numericDouble,
@@ -161,19 +207,58 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func reconfigure(_ configuration: StreamConfiguration) async {
+    private func reconfigure(_ configuration: StreamConfiguration, generation: Int) async {
+        let previousConfiguration = currentConfiguration
         do {
+            guard generation == streamGeneration else { return }
+            let configuration = try configuration.validated()
             await camera.stop()
-            try encoder.configure(configuration)
-            try await camera.prepare(configuration: configuration)
+            guard generation == streamGeneration else { return }
+            do {
+                try encoder.configure(configuration)
+                try await camera.prepare(configuration: configuration)
+            } catch {
+                encoder.invalidate()
+                throw error
+            }
+            guard generation == streamGeneration else { return }
             currentConfiguration = configuration
+            streamError = nil
+            remoteSession.sendControl(.cameraState(camera.controls))
             encoder.requestKeyframe()
             if let host = connectionPhase.host {
                 remoteSession.markStreaming(configuration: configuration, announceStart: false)
                 await liveActivity.update(host: host, configuration: configuration, status: "Live")
             }
         } catch {
-            streamError = error.localizedDescription
+            guard generation == streamGeneration else { return }
+            let requestedError = error
+            encoder.invalidate()
+            if let previousConfiguration {
+                do {
+                    try encoder.configure(previousConfiguration)
+                    try await camera.prepare(configuration: previousConfiguration)
+                    guard generation == streamGeneration else { return }
+                    currentConfiguration = previousConfiguration
+                    remoteSession.sendControl(.cameraState(camera.controls))
+                    remoteSession.markStreaming(
+                        configuration: previousConfiguration,
+                        announceStart: false
+                    )
+                    encoder.requestKeyframe()
+                    streamError = "Format change rejected: \(requestedError.localizedDescription). Continuing with the previous format."
+                    return
+                } catch {
+                    streamError = "Format change failed and the previous stream could not be restored: \(error.localizedDescription)"
+                }
+            } else {
+                streamError = requestedError.localizedDescription
+            }
+            await camera.stop()
+            currentConfiguration = nil
+            UIApplication.shared.isIdleTimerDisabled = false
+            remoteSession.disconnect()
+            connectionPhase = .failed(streamError ?? "Video reconfiguration failed.")
         }
     }
 
@@ -197,17 +282,25 @@ final class AppModel: ObservableObject {
               let height = fields["height"]?.unsignedValue.flatMap(Int.init(exactly:)),
               let fps = fields["fps"]?.unsignedValue.flatMap(Int.init(exactly:)),
               let bitrate = fields["bitrate"]?.unsignedValue.flatMap(Int.init(exactly:)) else { return nil }
-        return StreamConfiguration(codec: codec, width: width, height: height, framesPerSecond: fps, bitrate: bitrate)
+        return try? StreamConfiguration(
+            codec: codec,
+            width: width,
+            height: height,
+            framesPerSecond: fps,
+            bitrate: bitrate
+        ).validated()
     }
 }
 
 private extension CBORValue {
     var numericDouble: Double? {
+        let value: Double?
         switch self {
-        case .double(let value): value
-        case .unsigned(let value): Double(value)
-        case .negative(let value): Double(value)
-        default: nil
+        case .double(let number): value = number
+        case .unsigned(let number): value = Double(number)
+        case .negative(let number): value = Double(number)
+        default: value = nil
         }
+        return value.flatMap { $0.isFinite ? $0 : nil }
     }
 }

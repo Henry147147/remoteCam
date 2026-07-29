@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <new>
 
 #include "rcwin/guids.h"
 #include "rcwin/hr.h"
@@ -29,7 +30,7 @@ constexpr wchar_t kSddl[] =
     L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;LS)(A;;GRGWGX;;;IU)(A;;GRGX;;;AC)";
 
 struct RingHeader {
-  uint32_t magic;
+  std::atomic<uint32_t> magic;
   uint32_t version;
   uint32_t slotCount;
   uint32_t slotBytes;
@@ -39,8 +40,11 @@ struct RingHeader {
   std::atomic<uint32_t> height;
   std::atomic<uint32_t> stride;
   std::atomic<uint32_t> format;
-  std::atomic<uint32_t> fpsNum;
-  std::atomic<uint32_t> fpsDen;
+  // The named mapping outlives its creator while a producer still has it open. These
+  // fields make consumer lifetime explicit instead of mistaking that stale kernel
+  // object for an open camera. A writer binds to one generation.
+  std::atomic<uint32_t> consumerCount;
+  std::atomic<uint32_t> consumerGeneration;
   uint32_t reserved0;
 
   std::atomic<uint64_t> writeSeq;      // frames ever published; 0 means "none yet"
@@ -77,6 +81,7 @@ bool geometryIsSane(const FrameInfo& info) {
   // NV12 is 4:2:0; odd dimensions have no valid chroma plane.
   if (((info.width | info.height) & 1u) != 0) return false;
   if (info.stride < info.width) return false;
+  if (info.format != kFourccNv12) return false;
 
   // 64-bit throughout: stride and height are both attacker-controlled uint32, and the
   // product overflows 32 bits long before it stops being plausible.
@@ -107,6 +112,36 @@ uint64_t qpcFrequency() {
   return freq;
 }
 
+bool hasActiveConsumer(const RingHeader* h) {
+  const uint32_t count = h->consumerCount.load(std::memory_order_acquire);
+  return count != 0;
+}
+
+void resetPublishedFrames(RingHeader* h) {
+  h->formatGeneration.store(0, std::memory_order_relaxed);
+  h->width.store(0, std::memory_order_relaxed);
+  h->height.store(0, std::memory_order_relaxed);
+  h->stride.store(0, std::memory_order_relaxed);
+  h->format.store(0, std::memory_order_relaxed);
+  h->writeSeq.store(0, std::memory_order_relaxed);
+  h->lastWriteQpc.store(0, std::memory_order_relaxed);
+  for (uint32_t slot = 0; slot < kRingSlots; ++slot) {
+    h->slotSeq[slot].store(0, std::memory_order_relaxed);
+    h->slotPts[slot].store(0, std::memory_order_relaxed);
+    h->slotBytesUsed[slot].store(0, std::memory_order_relaxed);
+    h->slotWidth[slot].store(0, std::memory_order_relaxed);
+    h->slotHeight[slot].store(0, std::memory_order_relaxed);
+    h->slotStride[slot].store(0, std::memory_order_relaxed);
+  }
+}
+
+HRESULT lockWriteGuard(HANDLE guard, DWORD timeoutMillis = 5000) {
+  const DWORD wait = ::WaitForSingleObject(guard, timeoutMillis);
+  if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED) return S_OK;
+  if (wait == WAIT_TIMEOUT) return HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+  return RC_HR_FROM_LAST_ERROR();
+}
+
 // Builds SECURITY_ATTRIBUTES from kSddl. The descriptor must outlive the create call,
 // so the caller owns it and frees it with LocalFree.
 HRESULT makeSecurityAttributes(SECURITY_ATTRIBUTES& sa, PSECURITY_DESCRIPTOR& sd) {
@@ -123,15 +158,36 @@ HRESULT makeSecurityAttributes(SECURITY_ATTRIBUTES& sa, PSECURITY_DESCRIPTOR& sd
 
 }  // namespace
 
-RingNames globalRingNames() { return RingNames{kFrameSectionName, kFrameEventName}; }
+RingNames globalRingNames() {
+  return RingNames{kFrameSectionName, kFrameEventName, kFrameWriteGuardName};
+}
 
 RingNames testRingNames() {
-  return RingNames{L"Local\\RemoteCam.Test.Frames", L"Local\\RemoteCam.Test.Frame"};
+  return RingNames{L"Local\\RemoteCam.Test.Frames", L"Local\\RemoteCam.Test.Frame",
+                   L"Local\\RemoteCam.Test.FrameWriteGuard"};
 }
 
 FrameRing::~FrameRing() { close(); }
 
 void FrameRing::close() {
+  if (owner_ && view_) {
+    const HRESULT guardHr = lockWriteGuard(writeGuard_);
+    RingHeader* h = headerOf(view_);
+    const uint32_t previous =
+        h->consumerCount.fetch_sub(1, std::memory_order_acq_rel);
+    if (previous == 0) {
+      // Defensive repair for an unbalanced close; never wrap the shared count.
+      h->consumerCount.store(0, std::memory_order_release);
+    } else if (previous == 1) {
+      RC_LOG(L"last camera consumer closed ring");
+    }
+    if (SUCCEEDED(guardHr)) {
+      ::ReleaseMutex(writeGuard_);
+    } else {
+      RC_ERR(L"could not lock ring while closing a consumer: %s",
+             hrMessage(guardHr).c_str());
+    }
+  }
   if (view_) {
     ::UnmapViewOfFile(view_);
     view_ = nullptr;
@@ -144,7 +200,12 @@ void FrameRing::close() {
     ::CloseHandle(event_);
     event_ = nullptr;
   }
+  if (writeGuard_) {
+    ::CloseHandle(writeGuard_);
+    writeGuard_ = nullptr;
+  }
   owner_ = false;
+  consumerGeneration_ = 0;
 }
 
 HRESULT FrameRing::create(RingNames names) {
@@ -176,43 +237,79 @@ HRESULT FrameRing::create(RingNames names) {
   const bool existed = createErr == ERROR_ALREADY_EXISTS;
 
   event_ = ::CreateEventW(&sa, FALSE /* auto-reset */, FALSE, names.event);
-  ::LocalFree(sd);
   if (!event_) {
+    ::LocalFree(sd);
     const HRESULT hr = RC_HR_FROM_LAST_ERROR();
     RC_ERR(L"CreateEvent(%s) failed: %s", names.event, hrMessage(hr).c_str());
     close();
     return hr;
   }
+  writeGuard_ = ::CreateMutexW(&sa, FALSE, names.writeGuard);
+  ::LocalFree(sd);
+  if (!writeGuard_) {
+    const HRESULT hr = RC_HR_FROM_LAST_ERROR();
+    RC_ERR(L"CreateMutex(%s) failed: %s", names.writeGuard, hrMessage(hr).c_str());
+    close();
+    return hr;
+  }
 
   RC_RETURN_IF_FAILED(mapView(true));
+  const HRESULT guardHr = lockWriteGuard(writeGuard_);
+  if (FAILED(guardHr)) {
+    close();
+    return guardHr;
+  }
 
   RingHeader* h = headerOf(view_);
   if (!existed) {
-    // A fresh section is already zero-filled by the memory manager, so only the
-    // non-zero invariants need writing. magic goes last: a reader that sees the right
-    // magic must be able to trust everything else in the header.
+    // Begin the C++ object lifetimes explicitly; pagefile-backed zeroes are bytes, not
+    // constructed std::atomic objects. magic goes last with release ordering: a reader
+    // that observes it with acquire ordering can trust every fixed header field.
+    new (h) RingHeader{};
     h->slotCount = kRingSlots;
     h->slotBytes = kRingSlotBytes;
     h->version = kRingVersion;
-    std::atomic_thread_fence(std::memory_order_release);
-    h->magic = kRingMagic;
+    h->consumerGeneration.store(1, std::memory_order_relaxed);
+    h->consumerCount.store(1, std::memory_order_relaxed);
+    h->magic.store(kRingMagic, std::memory_order_release);
     RC_LOG(L"created ring %s (%llu bytes, %u slots)", names.section,
            static_cast<unsigned long long>(kSectionBytes), kRingSlots);
-  } else if (h->magic != kRingMagic || h->version != kRingVersion ||
+  } else if (h->magic.load(std::memory_order_acquire) != kRingMagic ||
+             h->version != kRingVersion ||
              h->slotCount != kRingSlots || h->slotBytes != kRingSlotBytes) {
     // Same four fields open() checks. CreateFileMapping on an existing name returns the
     // existing object and silently ignores both the requested size and the security
     // attributes, so attaching is exactly the case where the layout must be re-verified
     // rather than assumed from our own constants.
     RC_ERR(L"existing ring has magic 0x%08X version %u slots %u; expected 0x%08X/%u/%u",
-           h->magic, h->version, h->slotCount, kRingMagic, kRingVersion, kRingSlots);
+           h->magic.load(std::memory_order_relaxed), h->version, h->slotCount, kRingMagic,
+           kRingVersion, kRingSlots);
+    ::ReleaseMutex(writeGuard_);
     close();
     return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
   } else {
+    const uint32_t count = h->consumerCount.load(std::memory_order_relaxed);
+    if (count == 0) {
+      uint32_t next =
+          h->consumerGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
+      if (next == 0) h->consumerGeneration.store(1, std::memory_order_relaxed);
+      resetPublishedFrames(h);
+      h->consumerCount.store(1, std::memory_order_release);
+      RC_LOG(L"reopened ring %s for a new camera-consumer generation", names.section);
+    } else {
+      if (count == UINT32_MAX) {
+        ::ReleaseMutex(writeGuard_);
+        close();
+        return HRESULT_FROM_WIN32(ERROR_TOO_MANY_OPEN_FILES);
+      }
+      h->consumerCount.store(count + 1, std::memory_order_release);
+    }
     RC_LOG(L"attached to existing ring %s", names.section);
   }
 
   owner_ = true;
+  consumerGeneration_ = h->consumerGeneration.load(std::memory_order_acquire);
+  ::ReleaseMutex(writeGuard_);
   return S_OK;
 }
 
@@ -230,24 +327,51 @@ HRESULT FrameRing::open(bool writable, RingNames names) {
     return hr;
   }
 
-  event_ = ::OpenEventW(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE, names.event);
+  const DWORD eventAccess = writable ? EVENT_MODIFY_STATE : SYNCHRONIZE;
+  event_ = ::OpenEventW(eventAccess, FALSE, names.event);
   if (!event_) {
     const HRESULT hr = RC_HR_FROM_LAST_ERROR();
     RC_WARN(L"OpenEvent(%s) -> %s", names.event, hrMessage(hr).c_str());
     close();
     return hr;
   }
+  if (writable) {
+    writeGuard_ =
+        ::OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, names.writeGuard);
+    if (!writeGuard_) {
+      const HRESULT hr = RC_HR_FROM_LAST_ERROR();
+      RC_WARN(L"OpenMutex(%s) -> %s", names.writeGuard, hrMessage(hr).c_str());
+      close();
+      return hr;
+    }
+  }
 
   RC_RETURN_IF_FAILED(mapView(writable));
+  if (writable) {
+    const HRESULT guardHr = lockWriteGuard(writeGuard_);
+    if (FAILED(guardHr)) {
+      close();
+      return guardHr;
+    }
+  }
 
   const RingHeader* h = headerOf(view_);
-  if (h->magic != kRingMagic || h->version != kRingVersion ||
+  if (h->magic.load(std::memory_order_acquire) != kRingMagic ||
+      h->version != kRingVersion ||
       h->slotCount != kRingSlots || h->slotBytes != kRingSlotBytes) {
-    RC_ERR(L"ring layout mismatch: magic 0x%08X version %u slots %u", h->magic, h->version,
-           h->slotCount);
+    RC_ERR(L"ring layout mismatch: magic 0x%08X version %u slots %u",
+           h->magic.load(std::memory_order_relaxed), h->version, h->slotCount);
+    if (writable) ::ReleaseMutex(writeGuard_);
     close();
     return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
   }
+  if (!hasActiveConsumer(h)) {
+    if (writable) ::ReleaseMutex(writeGuard_);
+    close();
+    return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+  }
+  consumerGeneration_ = h->consumerGeneration.load(std::memory_order_acquire);
+  if (writable) ::ReleaseMutex(writeGuard_);
   return S_OK;
 }
 
@@ -268,14 +392,28 @@ HRESULT FrameRing::writeFrame(const uint8_t* src, uint32_t bytes, const FrameInf
   RC_RETURN_IF_NULL(src);
   RC_RETURN_HR_IF(bytes == 0 || bytes > kRingSlotBytes, E_INVALIDARG);
 
+  // Publishing remains non-blocking. The guard is held only during a consumer
+  // generation transition or another (unsupported) writer's copy.
+  const HRESULT guardHr = lockWriteGuard(writeGuard_, 0);
+  if (FAILED(guardHr)) return guardHr;
   RingHeader* h = headerOf(view_);
+  if (h->magic.load(std::memory_order_acquire) != kRingMagic ||
+      !hasActiveConsumer(h) ||
+      h->consumerGeneration.load(std::memory_order_acquire) != consumerGeneration_) {
+    ::ReleaseMutex(writeGuard_);
+    return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+  }
   const uint64_t seq = h->writeSeq.load(std::memory_order_relaxed);
   const uint32_t slot = static_cast<uint32_t>(seq % kRingSlots);
 
   // Odd sequence marks the slot in flight. Release ordering so a reader that observes
   // the odd value cannot also observe any of the pixel writes that follow it.
   const uint64_t slotSeq = h->slotSeq[slot].load(std::memory_order_relaxed);
-  h->slotSeq[slot].store(slotSeq + 1, std::memory_order_release);
+  // A producer can die after publishing the odd marker. Keep the next marker odd in
+  // that recovery case too; slotSeq + 1 would turn it even before the memcpy and let a
+  // reader accept a torn frame from the replacement producer.
+  const uint64_t writingSeq = slotSeq + ((slotSeq & 1u) ? 2u : 1u);
+  h->slotSeq[slot].store(writingSeq, std::memory_order_release);
   std::atomic_thread_fence(std::memory_order_release);
 
   std::memcpy(slotOf(view_, slot), src, bytes);
@@ -285,8 +423,17 @@ HRESULT FrameRing::writeFrame(const uint8_t* src, uint32_t bytes, const FrameInf
   h->slotHeight[slot].store(info.height, std::memory_order_relaxed);
   h->slotStride[slot].store(info.stride, std::memory_order_relaxed);
 
+  // If the last consumer closed (and possibly another reopened) during the copy, do
+  // not publish this slot into the replacement generation. Leaving it odd is safe; the
+  // next write's odd-sequence recovery handles it.
+  if (!hasActiveConsumer(h) ||
+      h->consumerGeneration.load(std::memory_order_acquire) != consumerGeneration_) {
+    ::ReleaseMutex(writeGuard_);
+    return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+  }
+
   std::atomic_thread_fence(std::memory_order_release);
-  h->slotSeq[slot].store(slotSeq + 2, std::memory_order_release);
+  h->slotSeq[slot].store(writingSeq + 1, std::memory_order_release);
 
   // Geometry is republished every frame rather than only on change. It costs four
   // relaxed stores and removes an entire class of bug where a reader attaches between
@@ -306,6 +453,7 @@ HRESULT FrameRing::writeFrame(const uint8_t* src, uint32_t bytes, const FrameInf
   h->writeSeq.store(seq + 1, std::memory_order_release);
 
   if (event_) ::SetEvent(event_);
+  ::ReleaseMutex(writeGuard_);
   return S_OK;
 }
 

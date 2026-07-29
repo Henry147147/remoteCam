@@ -23,7 +23,12 @@ Trig absTrig(float deg) {
 }
 
 bool degenerate(const TransformParams& p) {
-  return p.srcWidth <= 0 || p.srcHeight <= 0 || p.dstWidth <= 0 || p.dstHeight <= 0;
+  return p.srcWidth <= 0 || p.srcHeight <= 0 || p.dstWidth <= 0 || p.dstHeight <= 0 ||
+         !std::isfinite(p.rotationDeg);
+}
+
+float finiteOr(float value, float fallback) {
+  return std::isfinite(value) ? value : fallback;
 }
 
 }  // namespace
@@ -122,7 +127,7 @@ Mat3 forward(const TransformParams& p, Vec2 s) {
   const Mat3 flip = Mat3::scale(p.flipH ? -1.0f : 1.0f, p.flipV ? -1.0f : 1.0f);
   const Mat3 rot = Mat3::rotateDeg(p.rotationDeg);
   const Mat3 scl = Mat3::scale(s.x, s.y);
-  const Mat3 pan = Mat3::translate(p.panX, p.panY);
+  const Mat3 pan = Mat3::translate(finiteOr(p.panX, 0.0f), finiteOr(p.panY, 0.0f));
   const Mat3 toCentre = Mat3::translate(0.5f * static_cast<float>(p.dstWidth),
                                         0.5f * static_cast<float>(p.dstHeight));
   return toCentre * pan * scl * rot * flip * toOrigin;
@@ -130,7 +135,7 @@ Mat3 forward(const TransformParams& p, Vec2 s) {
 
 Vec2 effectiveScale(const TransformParams& p) {
   const Vec2 f = fitScale(p);
-  const float z = (p.zoom > 0.0f) ? p.zoom : 1.0f;
+  const float z = (std::isfinite(p.zoom) && p.zoom > 0.0f) ? p.zoom : 1.0f;
   return Vec2{f.x * z, f.y * z};
 }
 
@@ -150,7 +155,8 @@ Mat3 destToSource(const TransformParams& p) {
   // inverting the product numerically -- exact, and cheaper.
   const Mat3 fromCentre = Mat3::translate(-0.5f * static_cast<float>(p.dstWidth),
                                           -0.5f * static_cast<float>(p.dstHeight));
-  const Mat3 unpan = Mat3::translate(-p.panX, -p.panY);
+  const Mat3 unpan =
+      Mat3::translate(-finiteOr(p.panX, 0.0f), -finiteOr(p.panY, 0.0f));
   const Mat3 unscale = Mat3::scale(1.0f / s.x, 1.0f / s.y);
   const Mat3 unrot = Mat3::rotateDeg(-p.rotationDeg);
   // A flip is its own inverse.
@@ -180,7 +186,11 @@ Vec2 panSlack(const TransformParams& p) {
 }
 
 void clampPanForCoverage(TransformParams& p) {
-  if (degenerate(p)) return;
+  if (degenerate(p)) {
+    p.panX = 0.0f;
+    p.panY = 0.0f;
+    return;
+  }
 
   const Vec2 s = effectiveScale(p);
   if (s.x <= 0.0f || s.y <= 0.0f) return;
@@ -191,7 +201,8 @@ void clampPanForCoverage(TransformParams& p) {
   // pan vector into source axes before clamping. The flip and the sign are dropped:
   // the slack box is symmetric about the origin, so neither changes the result.
   const Mat3 toSourceAxes = Mat3::rotateDeg(-p.rotationDeg) * Mat3::scale(1.0f / s.x, 1.0f / s.y);
-  Vec2 v = toSourceAxes.apply(Vec2{p.panX, p.panY});
+  Vec2 v = toSourceAxes.apply(
+      Vec2{finiteOr(p.panX, 0.0f), finiteOr(p.panY, 0.0f)});
 
   v.x = std::clamp(v.x, -slack.x, slack.x);
   v.y = std::clamp(v.y, -slack.y, slack.y);

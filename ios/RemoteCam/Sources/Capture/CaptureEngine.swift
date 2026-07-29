@@ -49,7 +49,9 @@ actor CaptureEngine {
             let formats = Set(device.formats.flatMap { format -> [CaptureFormatDescriptor] in
                 let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 return [30, 60].compactMap { fps in
-                    guard format.videoSupportedFrameRateRanges.contains(where: { $0.maxFrameRate >= Double(fps) }) else { return nil }
+                    guard format.videoSupportedFrameRateRanges.contains(where: {
+                        $0.minFrameRate <= Double(fps) && Double(fps) <= $0.maxFrameRate
+                    }) else { return nil }
                     return CaptureFormatDescriptor(width: Int(dimensions.width), height: Int(dimensions.height), framesPerSecond: fps)
                 }
             })
@@ -58,6 +60,7 @@ actor CaptureEngine {
     }
 
     func configure(_ configuration: StreamConfiguration, deviceID: String? = nil) throws -> CameraControlState {
+        let configuration = try configuration.validated()
         let devices = Self.discoverDevices()
         guard let device = devices.first(where: { $0.uniqueID == deviceID })
                 ?? devices.first(where: { $0.position == .back && Self.isVirtualMultiLens($0.deviceType) })
@@ -66,16 +69,32 @@ actor CaptureEngine {
             throw CaptureEngineError.noCamera
         }
 
+        let newInput = try AVCaptureDeviceInput(device: device)
+        try Self.selectFormat(on: device, configuration: configuration)
+
         session.beginConfiguration()
         defer { session.commitConfiguration() }
 
-        if let input { session.removeInput(input) }
-        let newInput = try AVCaptureDeviceInput(device: device)
-        guard session.canAddInput(newInput) else { throw CaptureEngineError.cannotAddInput }
+        let previousInput = input
+        if let previousInput { session.removeInput(previousInput) }
+
+        guard session.canAddInput(newInput) else {
+            if let previousInput, session.canAddInput(previousInput) {
+                session.addInput(previousInput)
+            }
+            throw CaptureEngineError.cannotAddInput
+        }
         session.addInput(newInput)
 
-        if !session.outputs.contains(output) {
-            guard session.canAddOutput(output) else { throw CaptureEngineError.cannotAddOutput }
+        let outputWasPresent = session.outputs.contains(output)
+        if !outputWasPresent {
+            guard session.canAddOutput(output) else {
+                session.removeInput(newInput)
+                if let previousInput, session.canAddInput(previousInput) {
+                    session.addInput(previousInput)
+                }
+                throw CaptureEngineError.cannotAddOutput
+            }
             output.alwaysDiscardsLateVideoFrames = true
             output.videoSettings = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
@@ -84,7 +103,6 @@ actor CaptureEngine {
             session.addOutput(output)
         }
 
-        try Self.selectFormat(on: device, configuration: configuration)
         requestedFocusMode = .auto
         requestedWhiteBalanceMode = .auto
         if let connection = output.connection(with: .video), connection.isVideoMirroringSupported {
@@ -121,11 +139,11 @@ actor CaptureEngine {
         try device.lockForConfiguration()
         defer { device.unlockForConfiguration() }
 
-        if let zoom = update.zoom {
+        if let zoom = update.zoom, zoom.isFinite {
             device.videoZoomFactor = min(max(CGFloat(zoom), device.minAvailableVideoZoomFactor), device.maxAvailableVideoZoomFactor)
         }
 
-        if let x = update.focusPointX, let y = update.focusPointY {
+        if let x = update.focusPointX, let y = update.focusPointY, x.isFinite, y.isFinite {
             let point = CGPoint(x: min(max(x, 0), 1), y: min(max(y, 0), 1))
             if device.isFocusPointOfInterestSupported { device.focusPointOfInterest = point }
             if device.isExposurePointOfInterestSupported { device.exposurePointOfInterest = point }
@@ -141,12 +159,15 @@ actor CaptureEngine {
             case .locked where device.isFocusModeSupported(.locked):
                 device.focusMode = .locked
             case .manual where device.isLockingFocusWithCustomLensPositionSupported:
-                device.setFocusModeLocked(lensPosition: Float(update.focus ?? Double(device.lensPosition)))
+                let requested = update.focus.flatMap { $0.isFinite ? $0 : nil }
+                    ?? Double(device.lensPosition)
+                device.setFocusModeLocked(lensPosition: Float(min(max(requested, 0), 1)))
             default:
                 break
             }
             requestedFocusMode = focusMode
-        } else if let focus = update.focus, device.isLockingFocusWithCustomLensPositionSupported {
+        } else if let focus = update.focus, focus.isFinite,
+                  device.isLockingFocusWithCustomLensPositionSupported {
             device.setFocusModeLocked(lensPosition: Float(min(max(focus, 0), 1)))
             requestedFocusMode = .manual
         }
@@ -171,7 +192,7 @@ actor CaptureEngine {
             )
         }
 
-        if let bias = update.exposureBias {
+        if let bias = update.exposureBias, bias.isFinite {
             device.setExposureTargetBias(min(max(Float(bias), device.minExposureTargetBias), device.maxExposureTargetBias))
         }
 
@@ -261,7 +282,10 @@ actor CaptureEngine {
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             guard dimensions.width == configuration.width,
                   dimensions.height == configuration.height,
-                  format.videoSupportedFrameRateRanges.contains(where: { $0.maxFrameRate >= Double(configuration.framesPerSecond) }) else {
+                  format.videoSupportedFrameRateRanges.contains(where: {
+                      $0.minFrameRate <= Double(configuration.framesPerSecond)
+                          && Double(configuration.framesPerSecond) <= $0.maxFrameRate
+                  }) else {
                 return nil
             }
             return (format, Int(dimensions.width), Int(dimensions.height))
@@ -286,17 +310,18 @@ actor CaptureEngine {
     }
 
     private static func clampedDuration(_ seconds: Double?, for device: AVCaptureDevice) -> CMTime {
-        guard let seconds else { return device.exposureDuration }
+        guard let seconds, seconds.isFinite, seconds > 0 else { return device.exposureDuration }
         let requested = CMTime(seconds: seconds, preferredTimescale: 1_000_000_000)
         return CMTimeMaximum(device.activeFormat.minExposureDuration, CMTimeMinimum(requested, device.activeFormat.maxExposureDuration))
     }
 
     private static func clampedISO(_ iso: Double?, for device: AVCaptureDevice) -> Float {
-        guard let iso else { return device.iso }
+        guard let iso, iso.isFinite else { return device.iso }
         return min(max(Float(iso), device.activeFormat.minISO), device.activeFormat.maxISO)
     }
 
     private static func whiteBalanceGains(kelvin: Double, device: AVCaptureDevice) -> AVCaptureDevice.WhiteBalanceGains {
+        let kelvin = kelvin.isFinite ? kelvin : 5_000
         let values = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
             temperature: Float(min(max(kelvin, 2_000), 10_000)),
             tint: 0

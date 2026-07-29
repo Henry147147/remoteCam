@@ -2,6 +2,19 @@ import AVFoundation
 import XCTest
 
 final class VideoEncoderTests: XCTestCase {
+    func testRejectsInvalidDimensionsWithoutNarrowingTrap() {
+        let encoder = VideoEncoder()
+        XCTAssertThrowsError(try encoder.configure(StreamConfiguration(
+            codec: .h264,
+            width: Int.max,
+            height: 1_080,
+            framesPerSecond: 30,
+            bitrate: 1_000_000
+        ))) { error in
+            XCTAssertEqual(error as? StreamConfigurationError, .invalidDimensions)
+        }
+    }
+
     func testH264ProducesAnnexBKeyframe() throws {
         let encoder = VideoEncoder()
         let encoded = expectation(description: "VideoToolbox encoded a frame")

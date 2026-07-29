@@ -251,7 +251,11 @@ IFACEMETHODIMP MediaSource::Start(IMFPresentationDescriptor* pd, const GUID* tim
   }
 
   ::PropVariantClear(&empty);
-  if (FAILED(hr)) RC_ERR(L"Start failed: %s", rcwin::hrMessage(hr).c_str());
+  if (FAILED(hr)) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!shutdown_) started_ = wasStarted;
+    RC_ERR(L"Start failed: %s", rcwin::hrMessage(hr).c_str());
+  }
   return hr;
 }
 

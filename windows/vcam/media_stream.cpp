@@ -2,7 +2,9 @@
 
 #include <mferror.h>
 
+#include <cstdint>
 #include <new>
+#include <system_error>
 
 #include "rcwin/hr.h"
 #include "rcwin/nv12.h"
@@ -36,6 +38,10 @@ HRESULT MediaStream::Create(IMFMediaSource* source, IMFStreamDescriptor* descrip
 }
 
 MediaStream::~MediaStream() {
+  // Shutdown is the normal cycle-breaking path, but COM clients are not trusted to
+  // follow the ideal sequence. A joinable std::thread reaching its destructor calls
+  // std::terminate, which would take down the shared Camera Frame Server process.
+  Stop();
   if (stopEvent_) ::CloseHandle(stopEvent_);
 }
 
@@ -199,26 +205,46 @@ IFACEMETHODIMP MediaStream::GetStreamState(MF_STREAM_STATE* state) {
 // --- lifecycle --------------------------------------------------------------
 
 HRESULT MediaStream::Start() {
+  std::lock_guard<std::mutex> lifecycleLock(lifecycleMutex_);
   {
     std::lock_guard<std::mutex> lock(mutex_);
     RC_RETURN_HR_IF(shutdown_, MF_E_SHUTDOWN);
     if (running_) return S_OK;
-    running_ = true;
     tokens_.clear();
     requestOverflowLogged_ = false;  // warn once per streaming session, not once ever
+    sampleFailureLogged_ = false;
   }
 
+  // A prior worker can have ended itself after a timer failure. Reap it before
+  // assigning a replacement; assigning over a joinable std::thread terminates.
+  if (thread_.joinable()) thread_.join();
   ::ResetEvent(stopEvent_);
   frames_.start();
-  thread_ = std::thread(&MediaStream::ThreadMain, this);
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    running_ = true;
+  }
+  try {
+    thread_ = std::thread(&MediaStream::ThreadMain, this);
+  } catch (const std::system_error& error) {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      running_ = false;
+    }
+    frames_.stop();
+    RC_ERR(L"could not start frame thread: %hs", error.what());
+    return HRESULT_FROM_WIN32(ERROR_NOT_ENOUGH_MEMORY);
+  }
   RC_LOG(L"stream started (%ux%u @ %u/%u)", kWidth, kHeight, kFpsNumerator, kFpsDenominator);
   return S_OK;
 }
 
 HRESULT MediaStream::Stop() {
+  std::lock_guard<std::mutex> lifecycleLock(lifecycleMutex_);
+  bool wasRunning = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!running_) return S_OK;
+    wasRunning = running_;
     running_ = false;
   }
 
@@ -230,7 +256,7 @@ HRESULT MediaStream::Stop() {
     std::lock_guard<std::mutex> lock(mutex_);
     tokens_.clear();
   }
-  RC_LOG(L"stream stopped");
+  if (wasRunning) RC_LOG(L"stream stopped");
   return S_OK;
 }
 
@@ -279,15 +305,23 @@ HRESULT MediaStream::ProduceSample(uint64_t frameIndex, LONGLONG timestamp,
   // always top-down, so this would signal a Media Foundation change rather than a bug
   // here -- but writing through it as if it were positive would corrupt memory outside
   // the buffer, so refuse instead of guessing.
-  if (pitch <= 0) {
+  if (pitch <= 0 || !scanline0 || !bufferStart) {
     buffer2d->Unlock2D();
-    RC_ERR(L"unexpected non-positive pitch %ld from MFCreate2DMediaBuffer", pitch);
     return E_UNEXPECTED;
   }
 
   const rcwin::Nv12Layout layout =
       rcwin::nv12Layout(static_cast<int>(kWidth), static_cast<int>(kHeight),
                         static_cast<int>(pitch));
+  const uintptr_t startAddress = reinterpret_cast<uintptr_t>(bufferStart);
+  const uintptr_t scanlineAddress = reinterpret_cast<uintptr_t>(scanline0);
+  const uint64_t offset =
+      scanlineAddress >= startAddress ? scanlineAddress - startAddress : UINT64_MAX;
+  if (layout.totalSize == 0 || offset > bufferLength ||
+      layout.totalSize > static_cast<uint64_t>(bufferLength) - offset) {
+    buffer2d->Unlock2D();
+    return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+  }
   frames_.fill(scanline0, layout, frameIndex);
 
   RC_RETURN_IF_FAILED(buffer2d->Unlock2D());
@@ -319,6 +353,8 @@ void MediaStream::ThreadMain() {
   if (!timer) {
     RC_ERR(L"CreateWaitableTimerEx failed: %s",
            rcwin::hrMessage(rcwin::hrFromLastError()).c_str());
+    std::lock_guard<std::mutex> lock(mutex_);
+    running_ = false;
     return;
   }
 
@@ -365,7 +401,13 @@ void MediaStream::ThreadMain() {
     if (!haveRequest) continue;
 
     ComPtr<IMFSample> sample;
-    if (FAILED(ProduceSample(frameIndex, ::MFGetSystemTime(), &sample))) {
+    const HRESULT sampleHr = ProduceSample(frameIndex, ::MFGetSystemTime(), &sample);
+    if (FAILED(sampleHr)) {
+      if (!sampleFailureLogged_) {
+        sampleFailureLogged_ = true;
+        RC_WARN(L"sample production failed (%s); suppressing repeats until recovery",
+                rcwin::hrMessage(sampleHr).c_str());
+      }
       // Put the request back at the front rather than dropping it. The token is the
       // consumer's own correlation object; a request consumed without a sample is one
       // the consumer waits on forever. Order is preserved, it retries on the next tick,
@@ -374,6 +416,10 @@ void MediaStream::ThreadMain() {
       std::lock_guard<std::mutex> lock(mutex_);
       if (tokens_.size() < kMaxPendingRequests) tokens_.emplace_front(token);
       continue;
+    }
+    if (sampleFailureLogged_) {
+      sampleFailureLogged_ = false;
+      RC_LOG(L"sample production recovered");
     }
 
     if (token) sample->SetUnknown(MFSampleExtension_Token, token.Get());
@@ -390,6 +436,8 @@ void MediaStream::ThreadMain() {
   }
 
   ::CloseHandle(timer);
+  std::lock_guard<std::mutex> lock(mutex_);
+  running_ = false;
 }
 
 }  // namespace rcvcam
