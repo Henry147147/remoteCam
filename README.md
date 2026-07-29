@@ -80,3 +80,43 @@ phone and the selected PC.
 
 Apache-2.0. See [PLAN.md](PLAN.md) for third-party licence constraints — in
 particular, no code is taken from the GPL-licensed virtual camera projects.
+
+
+Committed to local `main` at `28198be` (`windows: harden vcam lifetime and diagnostics`). Build succeeded and both test suites passed. `main` is three commits ahead of `origin/main`; nothing was pushed. The untracked root `AGENTS.md` was left untouched.
+
+Prompt for the front-end agent:
+
+```
+Update the Windows Qt/QML front end to comply with the frame-ring contracts now on main at commit 28198be.
+
+Read windows/API-NOTES.md and use windows/tools/fakewriter/main.cpp as the reference producer implementation.
+
+Required changes:
+
+1. The app is a producer. It must call FrameRing::open(true), never create(). Poll while no consumer has the virtual camera open. Treat ERROR_FILE_NOT_FOUND as a normal “Waiting for a camera app…” state, not an error.
+
+2. The ring can disappear whenever the camera consumer closes. Detect write/open failures, close the stale handle, return to the waiting state, and retry. Reset the frame-pacing origin after reconnect so the app does not publish a catch-up burst.
+
+3. Enforce one running Qt producer per user session with a Local\ named mutex, analogous to rc-fakewriter. Do not use Global\, since the unelevated app lacks SeCreateGlobalPrivilege. If another instance exists, show/activate it or present a friendly explanation.
+
+4. For M1, publish exactly NV12 1920×1080 at 30 fps. Disable or clearly mark unsupported output format controls for now. The virtual camera currently rejects mismatched geometry; do not add scaling inside FrameSource.
+
+5. Publish valid metadata: even dimensions, stride >= width, format kFourccNv12, and bytesUsed sufficient for stride*height*3/2 and within kRingSlotBytes.
+
+6. Pace publishing with a high-resolution waitable timer against a fixed origin, not Sleep(1000/fps). Reset that origin on every reconnect.
+
+7. Make connection states explicit in the UI:
+   - Waiting for camera consumer
+   - Connected / publishing
+   - Producer conflict
+   - Actual failure
+   Avoid alarming notifications for the normal waiting/disconnect cycle.
+
+8. Do not log per-frame failures continuously. Log state transitions once and recovery once, consistent with the capped/rotated logging policy in API-NOTES.md.
+
+Keep changes under windows/app and the minimum necessary Windows integration code. Do not modify core/ or docs/protocol.md. Build with:
+  cmake --build build --config Debug --parallel
+  ctest --test-dir build -C Debug --output-on-failure
+
+Do not claim M1 is working until the elevated registration and live consumer matrix have been manually verified.
+```
