@@ -1,0 +1,14 @@
+# Deterministic telemetry variants for UI and policy verification.
+scenario smoke
+duration_ms 2000
+profile standard
+orientation 90
+thermal nominal
+run
+
+scenario smoke
+duration_ms 2000
+profile constrained
+orientation 37
+thermal serious
+run

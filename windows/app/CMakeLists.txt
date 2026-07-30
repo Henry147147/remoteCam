@@ -18,6 +18,8 @@ qt_add_executable(rc-app
     main.cpp
     frame_producer.cpp
     frame_producer.h
+    session_status.cpp
+    session_status.h
 )
 
 qt_add_qml_module(rc-app
@@ -31,7 +33,7 @@ qt_add_qml_module(rc-app
 target_link_libraries(rc-app PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
-    rcwin-net
+    rcwin-backend
     rcwin-common
     dnsapi
 )
@@ -50,6 +52,43 @@ set_target_properties(rc-app PROPERTIES
 )
 
 install(TARGETS rc-app RUNTIME DESTINATION ".")
+
+# Same Qt UI and same rcwin-backend, with an insecure trust policy compiled only into
+# this executable. It is a build-tree test host and is intentionally never installed.
+if(RC_BUILD_TESTS)
+    qt_add_executable(rc-e2e
+        bonjour_advertiser.cpp
+        bonjour_advertiser.h
+        main.cpp
+        frame_producer.cpp
+        frame_producer.h
+        session_status.cpp
+        session_status.h
+    )
+    qt_add_resources(rc-e2e e2e_qml
+        PREFIX "/"
+        FILES qml/Main.qml
+    )
+    target_compile_definitions(rc-e2e PRIVATE RC_APP_E2E_HOST=1)
+    target_link_libraries(rc-e2e PRIVATE
+        Qt6::Quick
+        Qt6::QuickControls2
+        rcwin-backend
+        rcwin-common
+        dnsapi
+    )
+    target_compile_features(rc-e2e PRIVATE cxx_std_20)
+    rc_target_strict_warnings(rc-e2e)
+    set_target_properties(rc-e2e PROPERTIES
+        OUTPUT_NAME RemoteCam-E2E
+        WIN32_EXECUTABLE TRUE
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/bin"
+    )
+endif()
 
 # Qt's runtime is only staged when a package is actually being built: windeployqt runs
 # on every `cmake --install` otherwise, which is slow and pointless for a dev tree.

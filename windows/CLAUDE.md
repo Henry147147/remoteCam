@@ -87,10 +87,11 @@ pass remain human steps; until those run, it is not system-verified.
 | `windows/common/` | **built** | `rcwin-common` — Win32 helpers, logging, NV12 geometry, the test pattern, the `Global\` frame ring. Plus `rcwin-common-tests`. |
 | `windows/vcam/` | **built** | `rc-vcam.dll` — MF media source COM server. Loaded by the Frame Server in Session 0, **not** by our app. |
 | `windows/register/` | **built** | `rc-vcam-register.exe` — elevated one-shot registration. Install time only. |
-| `windows/tools/` | **built** | `rc-vcam-probe` (opens the vcam via MF and DirectShow), `rc-fakewriter` (publishes into the ring), and explicit opt-in Debug `rc-fakepc` (insecure path compiled out of Release; never packaged). |
-| `windows/net/` | **built and tested** | Bounded framed TCP listener, one phone at a time, `TCP_NODELAY`, clean stop, and inbox Windows DNS-SD registration. |
+| `windows/tools/` | **built and tested** | `rc-vcam-probe`, `rc-fakewriter`, explicit opt-in Debug `rc-fakepc`, and non-shipping `rc-fakephone` with stateful scenarios, replay, PCG32 chaos, NDJSON/JUnit, and real-loopback tests. |
+| `windows/net/` | **built and tested** | Bounded dual-stack framed TCP listener, reusable resolving client, one phone at a time, serialized sends, `TCP_NODELAY`, clean stop, and inbox Windows DNS-SD registration. |
+| `windows/backend/` | **built and tested** | Auth-gated session controller, hello/progress/idle timeouts, bounded 8-AU/20-MiB queue, recovery, metrics, observer and encoded-consumer seams. No insecure policy implementation lives in this library. |
 | `windows/platform/` | **built and seam-tested** | D3D11VA FFmpeg decoder factory, NV12 D3D11 transform, ordered/PTS-preserving pipeline, and ABR. Hardware decode and the live sink are not verified. |
-| `windows/app/` | **built and smoke-tested** | `RemoteCam.exe` — Qt 6/QML shell, listener, and Bonjour lifecycle. It reports unpaired and withholds `ready`; tray, hotkeys, secure session, and live pipeline integration remain. |
+| `windows/app/` | **built and native-state-tested** | `RemoteCam.exe` plus non-installed `RemoteCam-E2E.exe`; stable QML automation IDs and native UIA/PrintWindow evidence. Production reports unpaired and withholds `ready`. Live preview, full controls, tray, hotkeys, secure session, and live sink integration remain, and the desktop harness reports them missing. |
 | `windows/obs-plugin/` | not started | Reads the same SHM ring directly, skipping the vcam round-trip. |
 | `windows/installer/` | **packaged, elevated run unverified** | Self-contained CPack + NSIS installer with camera registration, private TCP 7890 firewall rule, shortcuts, upgrade/uninstall, licence and notices. |
 

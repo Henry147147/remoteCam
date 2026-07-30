@@ -330,6 +330,70 @@ void testPhoneToPcParsing() {
         "device error missing its message is rejected");
 }
 
+void testPhoneToPcBuilders() {
+  std::printf("phone -> PC builders\n");
+
+  bool ok = false;
+  const Message hello = roundTrip(
+      rc::control::hello("Emulated iPhone", "0123456789abcdef", "iPhone", {"h264", "hevc"}),
+      ok);
+  rc::control::Hello parsedHello;
+  check(ok && rc::control::parseHello(hello, parsedHello), "hello builder parses");
+  check(parsedHello.deviceName == "Emulated iPhone" && parsedHello.platform == "ios" &&
+            parsedHello.supports("hevc"),
+        "hello builder matches the iOS identity shape");
+
+  check(roundTrip(rc::control::streamStart(), ok).type == "stream_start",
+        "stream_start builder has the expected type");
+
+  rc::control::Orientation orientation{37.0, false};
+  rc::control::Orientation orientationOut;
+  check(rc::control::parseOrientation(roundTrip(rc::control::orientation(orientation), ok),
+                                      orientationOut) &&
+            orientationOut.degrees == 37.0 && !orientationOut.locked,
+        "orientation builder round-trips");
+
+  rc::control::Thermal thermal{"serious"};
+  rc::control::Thermal thermalOut;
+  check(rc::control::parseThermal(roundTrip(rc::control::thermal(thermal), ok), thermalOut) &&
+            thermalOut.state == "serious",
+        "thermal builder round-trips");
+
+  rc::control::Battery battery{0.64, true};
+  rc::control::Battery batteryOut;
+  check(rc::control::parseBattery(roundTrip(rc::control::battery(battery), ok), batteryOut) &&
+            batteryOut.level == 0.64 && batteryOut.charging,
+        "battery builder round-trips");
+
+  rc::control::CameraState state;
+  state.deviceId = "back-wide";
+  state.position = "back";
+  state.lens = "wide";
+  state.zoom = 2.0;
+  state.focusMode = "manual";
+  state.focus = 0.33;
+  state.exposureMode = "locked";
+  state.iso = 160.0;
+  state.exposureSeconds = 1.0 / 120.0;
+  state.exposureBias = -0.25;
+  state.whiteBalanceMode = "manual";
+  state.whiteBalanceKelvin = 5200.0;
+  state.torch = true;
+  state.stabilization = true;
+  rc::control::CameraState stateOut;
+  check(rc::control::parseCameraState(roundTrip(rc::control::cameraState(state), ok), stateOut),
+        "camera_state builder parses");
+  check(stateOut.deviceId == state.deviceId && stateOut.zoom == 2.0 && stateOut.torch &&
+            stateOut.stabilization,
+        "camera_state builder preserves every state family");
+
+  rc::control::DeviceError deviceError{"capture_failed", "simulated camera loss"};
+  rc::control::DeviceError errorOut;
+  check(rc::control::parseError(roundTrip(rc::control::deviceError(deviceError), ok), errorOut) &&
+            errorOut.code == deviceError.code && errorOut.message == deviceError.message,
+        "error builder round-trips");
+}
+
 void testCapsParsing() {
   std::printf("caps parsing\n");
 
@@ -397,6 +461,35 @@ void testCapsParsing() {
   check(!none.preferredCodec(codec), "an unknown-only codec list yields nothing");
 }
 
+void testCapsBuilder() {
+  std::printf("caps builder\n");
+
+  rc::control::CameraDescriptor back;
+  back.id = "back-wide";
+  back.name = "Back Wide";
+  back.position = "back";
+  back.lens = "wide";
+  // Deliberately unsorted: Swift sorts these before encoding and the emulator must do
+  // the same so capture fixtures are deterministic.
+  back.formats = {{1920, 1080, 60}, {1280, 720, 30}};
+  rc::control::Caps caps;
+  caps.cameras = {back};
+  caps.codecs = {"hevc", "h264"};
+
+  bool ok = false;
+  const Message encoded = roundTrip(rc::control::capabilities(caps), ok);
+  rc::control::Caps decoded;
+  check(ok && rc::control::parseCaps(encoded, decoded), "caps builder parses");
+  check(decoded.cameras.size() == 1 && decoded.codecs == caps.codecs,
+        "caps builder preserves cameras and codec order");
+  if (!decoded.cameras.empty()) {
+    check(decoded.cameras[0].formats.size() == 2 &&
+              decoded.cameras[0].formats[0].width == 1280 &&
+              decoded.cameras[0].formats[1].fps == 60,
+          "caps builder orders formats like the iOS app");
+  }
+}
+
 void testStats() {
   std::printf("stats\n");
 
@@ -430,7 +523,9 @@ int main() {
   testPcToPhoneMessages();
   testSetControlIsSparse();
   testPhoneToPcParsing();
+  testPhoneToPcBuilders();
   testCapsParsing();
+  testCapsBuilder();
   testStats();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

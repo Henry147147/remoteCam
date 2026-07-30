@@ -76,10 +76,15 @@ class Connection {
   void shutdownSend();
   void close();
 
-  bool valid() const { return socket_ != INVALID_SOCKET; }
+  bool valid() const;
   const std::string& peer() const { return peer_; }
 
  private:
+  // One framed message is one indivisible byte stream operation. The listener's
+  // session controller, ABR timer and UI can all send concurrently; without this lock
+  // their headers and payloads can interleave even though each individual send() is
+  // legal. The same lock also makes close-vs-send a defined operation.
+  mutable std::mutex socketMutex_;
   SOCKET socket_ = INVALID_SOCKET;
   std::string peer_;
 };
@@ -109,8 +114,10 @@ class TcpListener {
   // an ephemeral port and read it back from boundPort(), which is what the tests do so
   // they never collide with a real RemoteCam or with a CI runner's occupied ports.
   //
-  // Binds to loopback only when `loopbackOnly`, which keeps a test from opening a
-  // listening socket to the network and tripping a firewall prompt.
+  // Production is a dual-stack IPv6 listener (IPV6_V6ONLY=0). Binds an IPv4 loopback
+  // socket only when `loopbackOnly`, which keeps a test from opening a listening socket
+  // to the network and tripping a firewall prompt while remaining reachable at
+  // 127.0.0.1 on every Windows CI host.
   HRESULT start(uint16_t port, SessionHandler* handler, bool loopbackOnly = false);
   void stop();
 

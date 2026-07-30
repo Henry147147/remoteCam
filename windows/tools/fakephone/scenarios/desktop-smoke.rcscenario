@@ -1,0 +1,8 @@
+# Minimal desktop/E2E checkpoint. The executable still requires
+# --allow-insecure-session on its command line.
+scenario smoke
+duration_ms 3000
+profile standard
+orientation 0
+thermal nominal
+run

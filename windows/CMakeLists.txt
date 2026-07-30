@@ -31,6 +31,7 @@ add_subdirectory(platform)    # decoder, D3D11 transform and frame pipeline
 add_subdirectory(vcam)        # rc-vcam.dll      MF media source, loaded in Session 0
 add_subdirectory(register)    # rc-vcam-register.exe
 add_subdirectory(tools)       # rc-vcam-probe, rc-fakewriter, rc-fakepc
+add_subdirectory(backend)     # rcwin-backend    auth-gated session controller
 
 # The M1 virtual-camera targets intentionally build without Qt, because the Windows
 # bring-up box and CI only need the SDK. Build the desktop producer when a dynamic Qt 6

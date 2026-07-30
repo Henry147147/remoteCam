@@ -6,6 +6,7 @@
 // or trips a firewall prompt.
 
 #include "rcnet/tcp_listener.h"
+#include "rcnet/tcp_client.h"
 
 #include <ws2tcpip.h>
 
@@ -98,6 +99,16 @@ class RecordingHandler final : public rcnet::SessionHandler {
     std::lock_guard<std::mutex> lock(mutex_);
     if (connection_ == nullptr) return E_POINTER;
     return connection_->send(frame);
+  }
+
+  HRESULT sendWithoutHandlerSerialization(const rc::wire::Frame& frame) {
+    rcnet::Connection* active = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      active = connection_;
+    }
+    if (active == nullptr) return E_POINTER;
+    return active->send(frame);
   }
 
  private:
@@ -433,6 +444,94 @@ void testStartRejections() {
   listener.stop();
 }
 
+void testReusableTcpClient() {
+  std::printf("Reusable TCP client\n");
+
+  RecordingHandler handler;
+  rcnet::TcpListener listener;
+  check(SUCCEEDED(listener.start(0, &handler, true)), "listener starts");
+
+  rcnet::TcpClient phone;
+  check(SUCCEEDED(phone.connect("127.0.0.1", listener.boundPort())),
+        "client resolves and connects");
+  check(phone.valid(), "client reports a live socket");
+  check(handler.waitForConnect(), "listener observes reusable client");
+
+  rc::wire::Frame hello;
+  hello.channel = static_cast<uint8_t>(rc::wire::Channel::Control);
+  hello.payload = rc::control::hello("Emulated iPhone", "0123456789abcdef", "iPhone",
+                                     {"h264", "hevc"}).encode();
+  check(SUCCEEDED(phone.send(hello)), "client sends a framed hello");
+  check(handler.waitForFrames(1), "listener receives the client frame");
+
+  rc::wire::Frame response;
+  response.channel = static_cast<uint8_t>(rc::wire::Channel::Control);
+  response.payload =
+      rc::control::serverInfo("Test PC", "fedcba9876543210", true, {"h264"}).encode();
+  check(SUCCEEDED(handler.sendFromServer(response)), "listener answers the client");
+  rc::wire::Frame received;
+  check(SUCCEEDED(phone.receive(received, 5000)), "client reassembles the response");
+  rc::control::Message message;
+  rc::cbor::Error cborError = rc::cbor::Error::None;
+  check(rc::control::Message::decode(received.payload, message, cborError) ==
+            rc::control::Error::None &&
+            message.type == "server_info",
+        "client response carries the expected control message");
+  check(phone.receive(received, 25) == HRESULT_FROM_WIN32(ERROR_TIMEOUT),
+        "client reports an idle receive timeout distinctly");
+
+  phone.close();
+  check(!phone.valid(), "client closes idempotently");
+  phone.close();
+  listener.stop();
+}
+
+void testConcurrentServerSendsStayFramed() {
+  std::printf("Concurrent server sends stay framed\n");
+  RecordingHandler handler;
+  rcnet::TcpListener listener;
+  check(SUCCEEDED(listener.start(0, &handler, true)), "listener starts");
+  rcnet::TcpClient phone;
+  check(SUCCEEDED(phone.connect("127.0.0.1", listener.boundPort())), "client connects");
+  check(handler.waitForConnect(), "handler sees client");
+
+  constexpr int kThreads = 4;
+  constexpr int kFramesPerThread = 40;
+  std::atomic<int> sendFailures{0};
+  std::atomic<int> received{0};
+  std::atomic<bool> receiveFailed{false};
+  std::thread reader([&] {
+    for (int index = 0; index < kThreads * kFramesPerThread; ++index) {
+      rc::wire::Frame frame;
+      if (FAILED(phone.receive(frame, 10000)) || frame.payload.size() != 4096) {
+        receiveFailed.store(true);
+        return;
+      }
+      ++received;
+    }
+  });
+
+  std::vector<std::thread> senders;
+  for (int threadIndex = 0; threadIndex < kThreads; ++threadIndex) {
+    senders.emplace_back([&, threadIndex] {
+      for (int frameIndex = 0; frameIndex < kFramesPerThread; ++frameIndex) {
+        rc::wire::Frame frame;
+        frame.channel = static_cast<uint8_t>(rc::wire::Channel::Stats);
+        frame.ptsMicros = static_cast<uint64_t>(threadIndex * 1000 + frameIndex);
+        frame.payload.assign(4096, static_cast<uint8_t>(threadIndex + 1));
+        if (FAILED(handler.sendWithoutHandlerSerialization(frame))) ++sendFailures;
+      }
+    });
+  }
+  for (std::thread& sender : senders) sender.join();
+  reader.join();
+  check(sendFailures.load() == 0, "all concurrent sends complete");
+  check(!receiveFailed.load() && received.load() == kThreads * kFramesPerThread,
+        "headers and payloads never interleave across senders");
+  phone.close();
+  listener.stop();
+}
+
 }  // namespace
 
 int main() {
@@ -450,6 +549,8 @@ int main() {
   testSecondPhoneRefused();
   testStopIsClean();
   testStartRejections();
+  testReusableTcpClient();
+  testConcurrentServerSendsStayFramed();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

@@ -11,6 +11,12 @@ yet joined to the virtual-camera sink. See [PLAN.md](PLAN.md) for milestones and
 [the iOS/backend handoff](docs/ios-backend-handoff.md) for the current integration
 work.
 
+The source now includes `rc-fakephone`, a stateful external TCP iPhone emulator,
+plus a native Windows UI Automation evidence harness. See the
+[fake-phone and desktop testing guide](docs/testing/fakephone.md). The harness is
+deliberately red for missing product surfaces: the current Qt app has no live phone
+preview or full feature controls, so correct displayed video is not yet verified.
+
 ## Why
 
 [iVCam](https://www.e2esoft.com/ivcam/) is the incumbent, and it works, but:

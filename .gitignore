@@ -16,6 +16,7 @@ aqtinstall.log
 *.exe
 .vs/
 out/
+test-artifacts/
 
 # Xcode
 DerivedData/

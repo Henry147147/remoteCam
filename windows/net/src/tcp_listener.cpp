@@ -57,6 +57,7 @@ Connection::~Connection() { close(); }
 
 HRESULT Connection::send(uint8_t channel, uint8_t frameFlags, uint64_t ptsMicros,
                          const uint8_t* payload, size_t payloadSize) {
+  std::lock_guard<std::mutex> lock(socketMutex_);
   if (socket_ == INVALID_SOCKET) return HRESULT_FROM_WIN32(ERROR_INVALID_STATE);
 
   std::vector<uint8_t> bytes;
@@ -92,14 +93,21 @@ HRESULT Connection::send(const rc::wire::Frame& frame) {
 }
 
 void Connection::shutdownSend() {
+  std::lock_guard<std::mutex> lock(socketMutex_);
   if (socket_ != INVALID_SOCKET) ::shutdown(socket_, SD_SEND);
 }
 
 void Connection::close() {
+  std::lock_guard<std::mutex> lock(socketMutex_);
   if (socket_ != INVALID_SOCKET) {
     ::closesocket(socket_);
     socket_ = INVALID_SOCKET;
   }
+}
+
+bool Connection::valid() const {
+  std::lock_guard<std::mutex> lock(socketMutex_);
+  return socket_ != INVALID_SOCKET;
 }
 
 TcpListener::~TcpListener() { stop(); }
@@ -111,23 +119,51 @@ HRESULT TcpListener::start(uint16_t port, SessionHandler* handler, bool loopback
 
   stopping_.store(false, std::memory_order_release);
 
-  listenSocket_ = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  // Production uses one dual-stack IPv6 socket so Bonjour results that prefer AAAA
+  // and IPv4-only phones reach the same listener/port. Loopback-only tests retain an
+  // IPv4 socket: binding ::1 cannot also accept 127.0.0.1, while binding :: would expose
+  // a test listener to the LAN and trigger a firewall prompt.
+  const int family = loopbackOnly ? AF_INET : AF_INET6;
+  listenSocket_ = ::socket(family, SOCK_STREAM, IPPROTO_TCP);
   if (listenSocket_ == INVALID_SOCKET) {
     const HRESULT hr = lastWsaError();
     RC_ERR(L"socket() failed: %s", rcwin::hrMessage(hr).c_str());
     return hr;
   }
 
+  if (family == AF_INET6) {
+    DWORD ipv6Only = 0;
+    if (::setsockopt(listenSocket_, IPPROTO_IPV6, IPV6_V6ONLY,
+                     reinterpret_cast<const char*>(&ipv6Only), sizeof(ipv6Only)) ==
+        SOCKET_ERROR) {
+      const HRESULT hr = lastWsaError();
+      RC_ERR(L"could not enable dual-stack listener: %s", rcwin::hrMessage(hr).c_str());
+      ::closesocket(listenSocket_);
+      listenSocket_ = INVALID_SOCKET;
+      return hr;
+    }
+  }
+
   // Deliberately NOT SO_REUSEADDR. On Windows it permits two sockets to bind the same
   // port outright -- it is not the polite TIME_WAIT reuse it is on BSD -- so setting it
   // would let a second RemoteCam silently steal the phone's connections.
-  sockaddr_in address{};
-  address.sin_family = AF_INET;
-  address.sin_port = ::htons(port);
-  address.sin_addr.s_addr = loopbackOnly ? ::htonl(INADDR_LOOPBACK) : ::htonl(INADDR_ANY);
+  sockaddr_storage address{};
+  int addressLength = 0;
+  if (family == AF_INET) {
+    auto* ipv4 = reinterpret_cast<sockaddr_in*>(&address);
+    ipv4->sin_family = AF_INET;
+    ipv4->sin_port = ::htons(port);
+    ipv4->sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
+    addressLength = sizeof(*ipv4);
+  } else {
+    auto* ipv6 = reinterpret_cast<sockaddr_in6*>(&address);
+    ipv6->sin6_family = AF_INET6;
+    ipv6->sin6_port = ::htons(port);
+    ipv6->sin6_addr = in6addr_any;
+    addressLength = sizeof(*ipv6);
+  }
 
-  if (::bind(listenSocket_, reinterpret_cast<sockaddr*>(&address), sizeof(address)) ==
-      SOCKET_ERROR) {
+  if (::bind(listenSocket_, reinterpret_cast<sockaddr*>(&address), addressLength) == SOCKET_ERROR) {
     const HRESULT hr = lastWsaError();
     RC_ERR(L"bind to port %u failed: %s", port, rcwin::hrMessage(hr).c_str());
     ::closesocket(listenSocket_);
@@ -137,10 +173,13 @@ HRESULT TcpListener::start(uint16_t port, SessionHandler* handler, bool loopback
 
   // Read the port back rather than echoing the argument: with port 0 the kernel picked
   // it, and that is the value a caller needs.
-  sockaddr_in bound{};
+  sockaddr_storage bound{};
   int boundLength = sizeof(bound);
   if (::getsockname(listenSocket_, reinterpret_cast<sockaddr*>(&bound), &boundLength) == 0) {
-    boundPort_.store(::ntohs(bound.sin_port), std::memory_order_release);
+    const uint16_t actual = bound.ss_family == AF_INET6
+                                ? ::ntohs(reinterpret_cast<sockaddr_in6*>(&bound)->sin6_port)
+                                : ::ntohs(reinterpret_cast<sockaddr_in*>(&bound)->sin_port);
+    boundPort_.store(actual, std::memory_order_release);
   } else {
     boundPort_.store(port, std::memory_order_release);
   }

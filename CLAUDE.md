@@ -222,12 +222,20 @@ and threaded seqlock contention. The remaining proof needs an elevated
 **do not describe M1 as working**.
 
 **Windows receive seams implemented and tested, but not a live production path.**
-The app binds TCP 7890 before advertising Bonjour, accepts one phone with
-`TCP_NODELAY`, and uses the shared wire/control codecs. The production app responds
-to `hello` with `paired: false` and intentionally withholds `ready`; it never opens
-an unauthenticated streaming session. Debug `rc-fakepc --allow-insecure-session` is
-the explicit development-only walking skeleton for exercising controls and validating
-an Annex-B stream; its insecure path is compiled out of Release. The platform library
+The dual-stack app listener binds TCP 7890 before advertising Bonjour, accepts one
+phone with `TCP_NODELAY`, and uses the shared wire/control codecs. `rcwin-backend`
+owns the auth-gated session states, hello/progress/idle timeouts, bounded 8-AU/20-MiB encoded
+queue, keyframe recovery, metrics, and observer/consumer seams shared by the app and
+tests. The production app responds to `hello` with `paired: false` and intentionally
+withholds `ready`; it never opens an unauthenticated streaming session. Debug
+`rc-fakepc --allow-insecure-session` remains the iOS walking skeleton.
+`rc-fakephone` is the external TCP iPhone emulator: phone-side CBOR, camera profiles,
+telemetry/control echoes, synthetic/replayed Annex-B, PCG32 chaos, scenarios,
+NDJSON/JUnit, and real loopback integration are automated. `RemoteCam-E2E.exe` uses
+the same Qt UI/backend with a trust bypass compiled into that non-installed test target
+only. The native UI Automation harness verifies streaming and production-lock
+checkpoints and intentionally reports the absent live preview/full controls as gaps.
+The platform library
 contains a D3D11VA FFmpeg decoder factory,
 NV12 D3D11 transform, PTS-preserving pipeline, and ABR controller. It compiles
 against pinned LGPL FFmpeg 8.1.2 and its seam tests pass, but no decoder/GPU hardware
@@ -252,7 +260,9 @@ Windows consumer matrix, so packaging success is not system integration proof.
 
 **Not done** — normative pairing/authentication/media encryption, connecting the
 production decoder/transform output to the frame ring, USB, effects, OBS, recorder,
-and physical iPhone/Windows/GPU verification.
+live Qt preview/full controls, and physical iPhone/Windows/GPU verification. A native
+desktop audit has run, but correct displayed phone video cannot pass until the preview
+exists; do not infer video correctness from the E2E wire-state pass.
 
 Next: settle and implement the shared security contract, join the tested receive
 seams into an authenticated end-to-end path, then run the M1 and physical-device

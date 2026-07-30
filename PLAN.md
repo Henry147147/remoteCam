@@ -239,7 +239,8 @@ Tray icon, run-at-login, minimize-to-tray, global hotkeys (rotate 90°, freeze, 
 ## 10. Testing
 
 - **rc-core is UI-free and unit-testable.** Protocol framing round-trips; **transform matrix verified against a CPU reference implementation at many angles with a PSNR floor**; effect-chain ordering; SPAKE2 handshake test vectors.
-- **`rc-fakephone`** — CLI that replays a video file over the real protocol. Lets the entire Windows side be developed and CI'd with no iPhone attached. Build this in M0; it pays for itself immediately.
+- **`rc-fakephone` — implemented and automated.** External TCP CLI with an iOS-shaped state machine, standard/constrained phone profiles, controls and telemetry echoes, structural and real Annex-B replay, deterministic PCG32 chaos, scenario scripts, NDJSON/JUnit, and stable exit codes. It refuses unsigned `ready` unless the test-only bypass is explicit.
+- **Native desktop evidence — implemented, current gaps detected.** `RemoteCam-E2E.exe` shares the Qt UI and `rcwin-backend` but compiles test trust into the non-installed target only. `windows/tests/desktop-e2e.ps1` uses Windows UI Automation and `PrintWindow`, verifies streaming plus the shipping pairing lock, captures evidence, and fails by default for every missing feature/pixel surface. The current app has no live preview/full controls, so displayed video is explicitly unverified rather than assumed.
 - **`rc-vcam-probe`** — opens the virtual camera through both MF and DirectShow and dumps frames. Proves the Session 0 handoff independently of any third-party app.
 - **Manual compatibility matrix** each milestone: Zoom · Teams · Discord · Chrome (Meet) · OBS · Windows Camera. These are the ones that break.
 
@@ -273,7 +274,7 @@ Project under **Apache-2.0**. Qt 6 is LGPLv3 → dynamic linking, ship Qt DLLs s
 ## Verification
 
 - `ctest` green in `core/tests` — transform invariants (done), plus framing and pairing vectors when those land.
-- `rc-fakephone --file sample.mp4 --connect 127.0.0.1` drives the full Windows pipeline with no phone; preview renders, frame counter advances.
+- `rc-fakephone replay --file sample.h264 --codec h264 --connect 127.0.0.1` drives the full Windows pipeline with no phone; preview renders, frame counter advances.
 - `rc-vcam-probe --mf` and `--directshow` both pull frames from the registered camera; SHA of a known test pattern matches.
 - Open **Zoom, Teams, Discord, Chrome/Meet, OBS, and Windows Camera** — RemoteCam appears in each picker and shows live video.
 - Rotate to 37° in `Fill` mode while streaming into Zoom — no black corners, no dropped frames, correct aspect.
@@ -355,20 +356,27 @@ the simulator suite passes 12 tests with the hardware-encoder test skipped where
 encoder exists. It has not been installed/run on an iPhone or streamed to Windows.
 The integration contract and blockers are in `docs/ios-backend-handoff.md`.
 
-**Windows receive and packaging seams — implemented and test-verified.** The bounded
-TCP listener binds port 7890 before Bonjour advertisement and accepts one
-`TCP_NODELAY` phone connection. Debug `rc-fakepc --allow-insecure-session` exercises
-the protocol and control surface without weakening the production app; that path is
-compiled out of Release. The platform
+**Windows receive, emulator, backend and packaging seams — implemented and
+test-verified.** The bounded dual-stack TCP listener binds port 7890 before Bonjour
+advertisement, accepts one `TCP_NODELAY` phone connection, and serializes concurrent
+sends. `rcwin-backend` is shared by the app and E2E tests and provides auth-gated
+states, timeouts, an 8-AU/20-MiB queue, recovery, metrics, observer, and consumer seams.
+Debug `rc-fakepc --allow-insecure-session` exercises iOS. The separate
+`rc-fakephone` exercises Windows using the real socket/protocol with smoke,
+control/adaptive/recovery/reconnect/backpressure/conformance/chaos/soak scenarios,
+replay, reports, and scripts. The non-installed `RemoteCam-E2E.exe` and native desktop
+harness verify the real Qt state checkpoints; its inventory currently reports live
+preview and the complete feature surface missing. The platform
 library contains the pinned LGPL FFmpeg D3D11VA decoder factory, NV12 D3D11 transform,
-PTS-preserving pipeline, and ABR policy. The Qt app, all eight Windows test binaries,
+PTS-preserving pipeline, and ABR policy. The Qt app, all ten Windows test suites,
 and the v0.1.0 NSIS installer build locally; the staged app starts and the installer
 archive is valid. These are seam checks, not a hardware or end-to-end video claim.
 
 ### Not done
 
-Production pairing/authentication/media encryption, joining decoder output to the
-frame ring in the app, the USB listener/tunnel contract, effects, OBS, and recorder.
+Production pairing/authentication/media encryption, joining decoder output to a Qt
+live preview and the frame ring in the app, the complete desktop control surface, the
+USB listener/tunnel contract, effects, OBS, and recorder.
 The installer packages and registers what exists but has not been elevated and run
 on a target machine. The iOS hardware/background/thermal verification matrix and the
 Windows decoder/GPU/consumer matrix also remain open.

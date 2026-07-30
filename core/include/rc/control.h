@@ -142,6 +142,15 @@ Message stats(const Stats& stats);
 // ---------------------------------------------------------------------------
 // phone -> PC
 
+// Builders mirror ios/RemoteCam/Sources/Wire/ControlMessage.swift. Keeping them in
+// the shared protocol library makes the Windows phone emulator byte-for-byte
+// compatible with the shipping client instead of maintaining a second collection of
+// ad-hoc CBOR maps in the test tool.
+Message hello(const std::string& deviceName, const std::string& deviceId,
+              const std::string& model, const std::vector<std::string>& caps,
+              const std::string& platform = "ios");
+Message streamStart();
+
 struct Hello {
   uint64_t version = 0;
   std::string deviceName;
@@ -158,17 +167,20 @@ struct Orientation {
   double degrees = 0.0;
   bool locked = false;
 };
+Message orientation(const Orientation& value);
 bool parseOrientation(const Message& message, Orientation& out);
 
 struct Thermal {
   std::string state;   // nominal | fair | serious | critical
 };
+Message thermal(const Thermal& value);
 bool parseThermal(const Message& message, Thermal& out);
 
 struct Battery {
   double level = 0.0;
   bool charging = false;
 };
+Message battery(const Battery& value);
 bool parseBattery(const Message& message, Battery& out);
 
 struct CameraState {
@@ -187,12 +199,14 @@ struct CameraState {
   bool torch = false;
   bool stabilization = false;
 };
+Message cameraState(const CameraState& value);
 bool parseCameraState(const Message& message, CameraState& out);
 
 struct DeviceError {
   std::string code;
   std::string message;
 };
+Message deviceError(const DeviceError& value);
 bool parseError(const Message& message, DeviceError& out);
 
 struct CaptureFormat {
@@ -216,6 +230,7 @@ struct Caps {
   // Best codec both ends understand, preferring HEVC per protocol.md.
   bool preferredCodec(Codec& out) const;
 };
+Message capabilities(const Caps& value);
 bool parseCaps(const Message& message, Caps& out);
 
 }  // namespace rc::control

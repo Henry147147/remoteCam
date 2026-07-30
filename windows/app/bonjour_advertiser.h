@@ -24,6 +24,7 @@ class BonjourAdvertiser final : public QObject {
     Advertising,
     Failed,
     WaitingForReceiver,
+    TestLoopback,
   };
   Q_ENUM(AdvertisementState)
 
@@ -46,6 +47,10 @@ class BonjourAdvertiser final : public QObject {
   // Keeps the discovery card truthful when bind/listen fails. The caller must not
   // call start() after this without first constructing a new receiver.
   void setReceiverFailure(const QString& detail);
+  // Native desktop tests bind only 127.0.0.1 so they never prompt for firewall access
+  // or publish an unreachable LAN service. This is a truthful UI state, not a fake
+  // successful Bonjour registration.
+  void setTestLoopback();
 
  signals:
   void stateChanged();

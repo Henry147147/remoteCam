@@ -228,6 +228,24 @@ bool Hello::supports(const std::string& capability) const {
   return std::find(caps.begin(), caps.end(), capability) != caps.end();
 }
 
+Message hello(const std::string& deviceName, const std::string& deviceId,
+              const std::string& model, const std::vector<std::string>& caps,
+              const std::string& platform) {
+  Message message = makeMessage("hello");
+  put(message.fields, "v", cbor::Value::unsignedInt(kProtocolVersion));
+  put(message.fields, "device_name", cbor::Value::text(deviceName));
+  put(message.fields, "device_id", cbor::Value::text(deviceId));
+  put(message.fields, "platform", cbor::Value::text(platform));
+  put(message.fields, "model", cbor::Value::text(model));
+  cbor::Array list;
+  list.reserve(caps.size());
+  for (const std::string& cap : caps) list.push_back(cbor::Value::text(cap));
+  put(message.fields, "caps", cbor::Value::array(std::move(list)));
+  return message;
+}
+
+Message streamStart() { return makeMessage("stream_start"); }
+
 bool parseHello(const Message& message, Hello& out) {
   if (message.type != "hello") return false;
   // `v` and `device_id` are the two fields the PC cannot proceed without: one decides
@@ -260,9 +278,22 @@ bool parseOrientation(const Message& message, Orientation& out) {
   return true;
 }
 
+Message orientation(const Orientation& value) {
+  Message message = makeMessage("orientation");
+  put(message.fields, "deg", cbor::Value::real(value.degrees));
+  put(message.fields, "locked", cbor::Value::boolean(value.locked));
+  return message;
+}
+
 bool parseThermal(const Message& message, Thermal& out) {
   if (message.type != "thermal") return false;
   return message.text("state", out.state);
+}
+
+Message thermal(const Thermal& value) {
+  Message message = makeMessage("thermal");
+  put(message.fields, "state", cbor::Value::text(value.state));
+  return message;
 }
 
 bool parseBattery(const Message& message, Battery& out) {
@@ -270,6 +301,13 @@ bool parseBattery(const Message& message, Battery& out) {
   if (!message.number("level", out.level)) return false;
   if (!message.boolean("charging", out.charging)) out.charging = false;
   return true;
+}
+
+Message battery(const Battery& value) {
+  Message message = makeMessage("battery");
+  put(message.fields, "level", cbor::Value::real(value.level));
+  put(message.fields, "charging", cbor::Value::boolean(value.charging));
+  return message;
 }
 
 bool parseCameraState(const Message& message, CameraState& out) {
@@ -304,9 +342,36 @@ bool parseCameraState(const Message& message, CameraState& out) {
   return true;
 }
 
+Message cameraState(const CameraState& value) {
+  Message message = makeMessage("camera_state");
+  put(message.fields, "device_id",
+      value.deviceId.has_value() ? cbor::Value::text(*value.deviceId) : cbor::Value::null());
+  put(message.fields, "position", cbor::Value::text(value.position));
+  put(message.fields, "lens", cbor::Value::text(value.lens));
+  put(message.fields, "zoom", cbor::Value::real(value.zoom));
+  put(message.fields, "focus_mode", cbor::Value::text(value.focusMode));
+  put(message.fields, "focus", cbor::Value::real(value.focus));
+  put(message.fields, "exposure_mode", cbor::Value::text(value.exposureMode));
+  put(message.fields, "iso", cbor::Value::real(value.iso));
+  put(message.fields, "exposure", cbor::Value::real(value.exposureSeconds));
+  put(message.fields, "ev", cbor::Value::real(value.exposureBias));
+  put(message.fields, "wb_mode", cbor::Value::text(value.whiteBalanceMode));
+  put(message.fields, "wb", cbor::Value::real(value.whiteBalanceKelvin));
+  put(message.fields, "torch", cbor::Value::boolean(value.torch));
+  put(message.fields, "stabilization", cbor::Value::boolean(value.stabilization));
+  return message;
+}
+
 bool parseError(const Message& message, DeviceError& out) {
   if (message.type != "error") return false;
   return message.text("code", out.code) && message.text("message", out.message);
+}
+
+Message deviceError(const DeviceError& value) {
+  Message message = makeMessage("error");
+  put(message.fields, "code", cbor::Value::text(value.code));
+  put(message.fields, "message", cbor::Value::text(value.message));
+  return message;
 }
 
 bool Caps::preferredCodec(Codec& out) const {
@@ -384,6 +449,47 @@ bool parseCaps(const Message& message, Caps& out) {
     }
   }
   return true;
+}
+
+Message capabilities(const Caps& value) {
+  Message message = makeMessage("caps");
+  cbor::Array cameras;
+  cameras.reserve(value.cameras.size());
+  for (const CameraDescriptor& descriptor : value.cameras) {
+    cbor::Map camera;
+    put(camera, "id", cbor::Value::text(descriptor.id));
+    put(camera, "name", cbor::Value::text(descriptor.name));
+    put(camera, "position", cbor::Value::text(descriptor.position));
+    put(camera, "lens", cbor::Value::text(descriptor.lens));
+
+    std::vector<CaptureFormat> formats = descriptor.formats;
+    std::sort(formats.begin(), formats.end(), [](const CaptureFormat& lhs,
+                                                  const CaptureFormat& rhs) {
+      if (lhs.width != rhs.width) return lhs.width < rhs.width;
+      if (lhs.height != rhs.height) return lhs.height < rhs.height;
+      return lhs.fps < rhs.fps;
+    });
+    cbor::Array encodedFormats;
+    encodedFormats.reserve(formats.size());
+    for (const CaptureFormat& format : formats) {
+      cbor::Map encoded;
+      put(encoded, "width", cbor::Value::unsignedInt(format.width));
+      put(encoded, "height", cbor::Value::unsignedInt(format.height));
+      put(encoded, "fps", cbor::Value::unsignedInt(format.fps));
+      encodedFormats.push_back(cbor::Value::map(std::move(encoded)));
+    }
+    put(camera, "formats", cbor::Value::array(std::move(encodedFormats)));
+    cameras.push_back(cbor::Value::map(std::move(camera)));
+  }
+  put(message.fields, "cameras", cbor::Value::array(std::move(cameras)));
+
+  cbor::Array codecs;
+  codecs.reserve(value.codecs.size());
+  for (const std::string& codec : value.codecs) {
+    codecs.push_back(cbor::Value::text(codec));
+  }
+  put(message.fields, "codecs", cbor::Value::array(std::move(codecs)));
+  return message;
 }
 
 }  // namespace rc::control

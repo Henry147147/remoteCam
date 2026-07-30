@@ -6,6 +6,7 @@
 
 add_library(rcwin-net STATIC
     src/bonjour_service.cpp
+    src/tcp_client.cpp
     src/tcp_listener.cpp
 )
 

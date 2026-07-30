@@ -84,6 +84,8 @@ QString BonjourAdvertiser::statusLabel() const {
       return QStringLiteral("Automatic discovery unavailable");
     case AdvertisementState::WaitingForReceiver:
       return QStringLiteral("Waiting for network receiver");
+    case AdvertisementState::TestLoopback:
+      return QStringLiteral("Loopback desktop test");
   }
   return QStringLiteral("Automatic discovery unavailable");
 }
@@ -151,6 +153,15 @@ void BonjourAdvertiser::start() {
 void BonjourAdvertiser::setReceiverFailure(const QString& detail) {
   if (callbackPending_ || state_ == AdvertisementState::Advertising) return;
   setFailure(QStringLiteral("TCP port %1 is not listening: %2").arg(kDefaultPort).arg(detail));
+}
+
+void BonjourAdvertiser::setTestLoopback() {
+  if (callbackPending_ || state_ == AdvertisementState::Advertising) return;
+  state_ = AdvertisementState::TestLoopback;
+  statusDetail_ = QStringLiteral(
+      "The desktop verification host is listening on 127.0.0.1:%1 and is not advertised.")
+                      .arg(kDefaultPort);
+  emit stateChanged();
 }
 
 void WINAPI BonjourAdvertiser::registrationComplete(DWORD status, void* queryContext,

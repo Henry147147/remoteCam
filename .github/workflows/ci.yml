@@ -75,11 +75,10 @@ jobs:
   # The Windows client cannot be cross-compiled from a Linux dev box, so this job is
   # the only place the Media Foundation and Win32 code gets compiled at all.
   #
-  # It builds and runs rcwin-common-tests, which covers NV12 geometry, the test pattern
-  # invariants and the shared-memory seqlock -- all of which work on a runner. It does
-  # NOT verify the virtual camera itself: that needs an elevated registration and a
-  # real camera consumer, which a hosted runner cannot provide. Registering a
-  # system-wide virtual camera on a throwaway VM would prove nothing anyway.
+  # It builds and runs all Windows CTest suites: common/platform seams, concurrent
+  # framed networking, the auth-gated backend, and the stateful fake-phone loopback
+  # matrix. It does NOT verify the virtual camera or desktop pixels: those need an
+  # elevated registration, a real camera consumer, and an interactive desktop.
   windows-client:
     name: windows client
     runs-on: windows-latest
@@ -193,8 +192,9 @@ jobs:
             corrected cross-session frame ring, TCP listener, Bonjour discovery, and
             private-network firewall setup. The source also includes the byte-exact
             CBOR/framing/control codecs, FFmpeg/D3D11 pipeline seams, ABR controller,
-            and a Debug-only rc-fakepc harness whose insecure path is compiled out of
-            Release builds.
+            the auth-gated backend, and the external rc-fakephone conformance/chaos
+            harness. Test-only RemoteCam-E2E, rc-fakephone, and rc-fakepc executables
+            are not installed; rc-fakepc's insecure path is compiled out of Release.
 
             Important limitations: production pairing is not implemented, so
             RemoteCam.exe intentionally will not start an unauthenticated phone stream.
