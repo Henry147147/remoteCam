@@ -25,6 +25,57 @@ prefer opening an issue over unilaterally reshaping `core/`.
 Per-platform detail lives in `windows/CLAUDE.md` and `ios/CLAUDE.md`, which load
 automatically when working in those trees.
 
+**"Agent" above means a machine with a human at it, not a subagent.** Do not spawn a
+"Windows agent" or "Mac agent" — you cannot acquire a toolchain you do not have. When
+work belongs to another host, write it down (commit message, issue, or the status
+section here) and stop.
+
+## How to work in this repo
+
+Tuned for Claude Opus 5 per Anthropic's
+[Opus 5 prompting guide](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5).
+Effort `high` is the right default here; `xhigh` for a multi-file feature or a
+cross-tree refactor, `low`/`medium` for a scoped edit or a question about the code.
+
+**Scope.** Deliver what was asked, at the scope intended. Make routine judgment calls
+yourself; check in only when different readings lead to materially different work. If
+the request looks mistaken or a better approach exists, say so in a sentence and
+continue with the task as asked rather than quietly narrowing, widening, or
+transforming it. Finish the whole task, and stop short of what was clearly not asked.
+A bug fix does not need the surrounding code cleaned up; a new component does not need
+configurability nobody requested; only validate at real boundaries (wire input, OS
+calls), not between our own functions.
+
+**Delegation.** Delegate only for large, genuinely independent, parallelizable
+tracks — a wide multi-file investigation across `windows/` *and* `ios/`, say. Do not
+delegate what you can finish in a handful of tool calls, do not use a subagent to
+check your own work, and prefer one subagent over several. A `grep` beats spawning an
+explorer.
+
+**Self-verification.** You already check your own work; no instruction here asks you
+to double-check, re-verify, or add a final verification pass. The `## Verification`
+sections in `windows/CLAUDE.md` and `ios/CLAUDE.md` are a different thing: they are
+hardware and consumer matrices a **human** must run on real devices, listed because
+unit tests cannot reach them. Never mark those done from a clean build.
+
+**Grounding.** Never make a claim about code you have not opened — this handbook
+records decisions, not current line numbers, and the status section below can lag the
+tree. Read the file before answering questions about it.
+
+**Progress updates.** One sentence before your first tool call saying what you are
+about to do. While working, speak up only on a real finding or a change of direction.
+When you finish, lead with the outcome — first sentence answers "what happened" — and
+put supporting detail after it. Correct an earlier statement only when the error would
+change the reader's code or decisions; otherwise fix it and move on.
+
+**Written output.** This repo already carries ~1,000 lines of Markdown handbook and
+plan. Record state by editing the status sections and by committing, not by adding new
+report, summary, or handoff files — a new `.md` is a decision to maintain it forever.
+Match a document's length to its substance: no filler sections, no restating the plan
+back, no boilerplate. Same for code comments — comment the *why* where a simpler
+approach is wrong, and nowhere else. Delete scratch files and throwaway scripts when
+you are done with them.
+
 ## Locked decisions — do not relitigate
 
 These were settled deliberately by the project owner after research. Each removes a
@@ -195,3 +246,8 @@ handoff. In parallel, settle the normative pairing/authentication details.
 
 Also fixed by convention: **positive `rotationDeg` is clockwise as displayed**, so
 the UI's "rotate right" button is +90.
+
+<reminder>
+Keep replies and written documents reasonably concise. Stay inside the scope asked
+for. Delegate rarely. Claim only what you ran.
+</reminder>
