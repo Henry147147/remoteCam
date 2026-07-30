@@ -148,6 +148,11 @@ void BonjourAdvertiser::start() {
   }
 }
 
+void BonjourAdvertiser::setReceiverFailure(const QString& detail) {
+  if (callbackPending_ || state_ == AdvertisementState::Advertising) return;
+  setFailure(QStringLiteral("TCP port %1 is not listening: %2").arg(kDefaultPort).arg(detail));
+}
+
 void WINAPI BonjourAdvertiser::registrationComplete(DWORD status, void* queryContext,
                                                      PDNS_SERVICE_INSTANCE instance) {
   if (instance) ::DnsServiceFreeInstance(instance);

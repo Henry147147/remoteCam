@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 jobs:
@@ -24,7 +25,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DRC_BUILD_TESTS=ON
@@ -34,6 +35,42 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config Debug --output-on-failure
+
+  clang-tidy:
+    name: clang-tidy (core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DRC_BUILD_TESTS=ON
+          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_CXX_CLANG_TIDY="clang-tidy;--warnings-as-errors=*"
+
+      - name: Analyze
+        run: cmake --build build -j
+
+  sanitizers:
+    name: ASAN + UBSAN (core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DRC_BUILD_TESTS=ON
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build --output-on-failure
 
   # The Windows client cannot be cross-compiled from a Linux dev box, so this job is
   # the only place the Media Foundation and Win32 code gets compiled at all.
@@ -47,16 +84,118 @@ jobs:
     name: windows client
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Configure
-        run: cmake -S . -B build -A x64 -DRC_BUILD_TESTS=ON
+        run: >-
+          cmake -S . -B build -A x64 -DRC_BUILD_TESTS=ON -DRC_WITH_FFMPEG=ON
+          -DVCPKG_MANIFEST_FEATURES=ffmpeg
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
 
       - name: Build
         run: cmake --build build --config Debug
 
       - name: Test
         run: ctest --test-dir build --build-config Debug --output-on-failure
+
+  msvc-analyze:
+    name: MSVC code analysis
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -A x64 -DRC_BUILD_TESTS=ON
+          -DRC_BUILD_QT_APP=OFF -DRC_ENABLE_MSVC_ANALYZE=ON
+
+      - name: Analyze
+        run: cmake --build build --config Release
+
+  codeql:
+    name: CodeQL (C++)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DRC_BUILD_TESTS=ON
+          cmake --build build -j
+
+      - uses: github/codeql-action/analyze@v4
+
+  # Builds the shippable installer. Separate from windows-client because it needs Qt
+  # and NSIS, builds Release rather than Debug, and would otherwise slow every PR down
+  # for no gain -- a PR cannot break packaging without also breaking the build.
+  #
+  # Like windows-client, this proves nothing about the virtual camera: registration is
+  # an elevated action against a real Frame Server, and the installer's post-install
+  # step is only exercised by actually running the .exe on a Windows 11 machine.
+  installer:
+    name: windows installer
+    runs-on: windows-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: write   # for the release upload on tags
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          arch: win64_msvc2022_64
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DRC_BUILD_TESTS=OFF -DRC_BUILD_INSTALLER=ON
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: cpack --config build/CPackConfig.cmake -C Release -B build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemoteCam-installer
+          path: build/RemoteCam-*-win64.exe
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: build/RemoteCam-*-win64.exe
+          prerelease: true
+          make_latest: false
+          body: |
+            RemoteCam v0.1.0 is a development pre-release.
+
+            Included in the installer: the Windows virtual-camera components, Qt shell,
+            corrected cross-session frame ring, TCP listener, Bonjour discovery, and
+            private-network firewall setup. The source also includes the byte-exact
+            CBOR/framing/control codecs, FFmpeg/D3D11 pipeline seams, ABR controller,
+            and a Debug-only rc-fakepc harness whose insecure path is compiled out of
+            Release builds.
+
+            Important limitations: production pairing is not implemented, so
+            RemoteCam.exe intentionally will not start an unauthenticated phone stream.
+            There is no live end-to-end iPhone video path in this release. FFmpeg
+            d3d11va decode and the D3D11 transform compile in CI but have not been run
+            on supported hardware. The virtual camera and installer have not been
+            verified against the real consumer/device matrix either.
 
   # The simulator validates the protocol/state-management suite and catches Swift 6
   # concurrency regressions. Capture and hardware encoding still require the device
@@ -65,7 +204,7 @@ jobs:
     name: ios app
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Build and test
         working-directory: ios

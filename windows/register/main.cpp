@@ -191,7 +191,8 @@ HRESULT reportEnumeration() {
     WCHAR* name = nullptr;
     UINT32 length = 0;
     if (SUCCEEDED(devices[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, &name,
-                                                 &length))) {
+                                                 &length)) &&
+        name != nullptr) {
       const bool ours = wcscmp(name, rcwin::kFriendlyName) == 0;
       found = found || ours;
       print(L"    %s%s\n", name, ours ? L"   <-- RemoteCam" : L"");

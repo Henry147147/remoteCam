@@ -38,7 +38,11 @@
 namespace rcwin {
 
 inline constexpr uint32_t kRingMagic = 0x4D414352u;    // "RCAM"
-inline constexpr uint32_t kRingVersion = 2u;
+// 3 adds the producer claim and the consumer's requested geometry. Both changed the
+// header layout, so a v2 producer and a v3 consumer must not talk to each other --
+// open() and create() reject a version they do not recognise. They ship in one
+// installer, so the break is contained to a half-upgraded developer tree.
+inline constexpr uint32_t kRingVersion = 3u;
 inline constexpr uint32_t kRingSlots = 4u;
 inline constexpr uint32_t kFourccNv12 = 0x3231564Eu;   // "NV12"
 
@@ -107,12 +111,32 @@ class FrameRing {
 
   bool valid() const { return view_ != nullptr; }
 
+  // Declares the geometry this consumer wants published, so a producer can adapt
+  // instead of having its frames silently discarded for not matching.
+  //
+  // The published width/height/stride in the header are written by the *producer* and
+  // describe what it last sent. That is the wrong direction for negotiation: the
+  // consumer is the one that picked a media type. These two calls are the other
+  // direction. Consumer-only; a producer calling this is a bug.
+  HRESULT requestGeometry(uint32_t width, uint32_t height, uint32_t format);
+
+  //   S_OK      a consumer has declared what it wants
+  //   S_FALSE   none has yet, so publish whatever you like and expect it to be dropped
+  //             if it does not happen to match
+  HRESULT requestedGeometry(uint32_t& width, uint32_t& height, uint32_t& format) const;
+
   // Publishes a frame. Never blocks. `bytes` must not exceed kRingSlotBytes.
   //
-  // EXACTLY ONE LOGICAL PRODUCER. The named write guard prevents two processes from
-  // corrupting a slot or losing a sequence update, but it cannot decide which stream
-  // should win: simultaneous producers would still interleave unrelated frames.
-  // Applications therefore enforce their own per-session single-instance guard.
+  // EXACTLY ONE LOGICAL PRODUCER, and open(writable) now enforces it rather than
+  // trusting callers to. The first writer to open claims the ring by recording its
+  // process id and process start time; a second writer's open fails with
+  // ERROR_ALREADY_EXISTS instead of interleaving unrelated frames into the same slot.
+  // The claim is released on close(), and reclaimed automatically when the recorded
+  // process is gone -- start time is recorded alongside the id because pids are
+  // recycled, and inheriting a stranger's claim would wedge the ring until reboot.
+  //
+  // A caller that cannot open a process to test it (a producer in another user's
+  // session) treats the claim as live rather than stealing it.
   //
   // Geometry in `info` is recorded as given and NOT validated here. That asymmetry is
   // deliberate: a hostile producer would map the section and write it directly rather
@@ -149,6 +173,9 @@ class FrameRing {
   HANDLE writeGuard_ = nullptr;
   void* view_ = nullptr;
   bool owner_ = false;
+  // True when this instance holds the single-producer claim, so close() knows to
+  // release it and does not clear a claim belonging to somebody else.
+  bool producerClaim_ = false;
   uint32_t consumerGeneration_ = 0;
   // Edge-triggers the "implausible geometry" warning so a producer stuck publishing bad
   // frames logs once rather than at frame rate.

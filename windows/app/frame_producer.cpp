@@ -132,15 +132,22 @@ void FrameProducer::postState(ConnectionState state, QString detail) {
 }
 
 void FrameProducer::run(std::stop_token stopToken) {
-  const rcwin::Nv12Layout layout = rcwin::nv12Layout(kOutputWidth, kOutputHeight);
-  const uint64_t minimumBytes = static_cast<uint64_t>(layout.stride) * layout.height * 3u / 2u;
-  if (layout.width != kOutputWidth || layout.height != kOutputHeight || layout.width % 2 != 0 ||
-      layout.height % 2 != 0 || layout.stride < layout.width || layout.totalSize < minimumBytes ||
-      layout.totalSize > rcwin::kRingSlotBytes ||
-      layout.totalSize > std::numeric_limits<uint32_t>::max()) {
-    RC_ERR(L"fixed M1 output geometry is invalid");
+  // Applied to the startup default and to anything a consumer later asks for, so an
+  // absurd request cannot walk the producer off the end of a ring slot.
+  const auto layoutIsUsable = [](const rcwin::Nv12Layout& l) {
+    const uint64_t minimumBytes = static_cast<uint64_t>(l.stride) * l.height * 3u / 2u;
+    return l.width > 0 && l.height > 0 && l.width % 2 == 0 && l.height % 2 == 0 &&
+           l.stride >= l.width && l.totalSize >= minimumBytes &&
+           l.totalSize <= rcwin::kRingSlotBytes &&
+           l.totalSize <= std::numeric_limits<uint32_t>::max();
+  };
+
+  rcwin::Nv12Layout layout = rcwin::nv12Layout(kOutputWidth, kOutputHeight);
+  if (!layoutIsUsable(layout) || layout.width != kOutputWidth ||
+      layout.height != kOutputHeight) {
+    RC_ERR(L"default output geometry is invalid");
     postState(ConnectionState::ActualFailure,
-              QStringLiteral("The fixed NV12 output geometry is invalid."));
+              QStringLiteral("The default NV12 output geometry is invalid."));
     return;
   }
 
@@ -214,8 +221,38 @@ void FrameProducer::run(std::stop_token stopToken) {
       }
       pacingTick = 0;
       transition(ConnectionState::ConnectedPublishing,
-                 QStringLiteral("Publishing fixed NV12 1920 x 1080 video at 30 fps."),
+                 QStringLiteral("Publishing NV12 %1 x %2 video at %3 fps.")
+                     .arg(layout.width)
+                     .arg(layout.height)
+                     .arg(kOutputFps),
                  L"camera consumer connected; publishing");
+    }
+
+    // The consumer owns the media type; adopt whatever it asked for. Both loads are
+    // relaxed atomics on a mapped page, so checking every frame costs nothing and lets
+    // a mid-stream resolution change take effect without a reconnect.
+    uint32_t wantWidth = 0, wantHeight = 0, wantFormat = 0;
+    if (ring.requestedGeometry(wantWidth, wantHeight, wantFormat) == S_OK &&
+        wantFormat == rcwin::kFourccNv12 &&
+        (static_cast<int>(wantWidth) != layout.width ||
+         static_cast<int>(wantHeight) != layout.height)) {
+      const rcwin::Nv12Layout candidate =
+          rcwin::nv12Layout(static_cast<int>(wantWidth), static_cast<int>(wantHeight));
+      if (layoutIsUsable(candidate)) {
+        layout = candidate;
+        frame.assign(layout.totalSize, 0);
+        RC_LOG(L"adopting consumer-requested geometry %ux%u", wantWidth, wantHeight);
+        // postState, not transition: the connection state is unchanged and transition
+        // early-returns on that, which would leave the old resolution on screen.
+        postState(ConnectionState::ConnectedPublishing,
+                  QStringLiteral("Publishing NV12 %1 x %2 video at %3 fps.")
+                      .arg(layout.width)
+                      .arg(layout.height)
+                      .arg(kOutputFps));
+      } else {
+        RC_WARN(L"consumer requested %ux%u, which cannot be published; keeping %dx%d",
+                wantWidth, wantHeight, layout.width, layout.height);
+      }
     }
 
     rcwin::renderPattern(frame.data(), layout, frameIndex, rcwin::PatternStyle::Writer);

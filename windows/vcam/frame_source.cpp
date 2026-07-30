@@ -29,6 +29,20 @@ void FrameSource::stop() {
 bool FrameSource::fill(uint8_t* dst, const rcwin::Nv12Layout& layout, uint64_t frameIndex) {
   bool live = false;
 
+  // Tell the producer what this consumer actually picked, so a mismatch is something it
+  // can correct rather than something we silently drop frames over.
+  if (ringReady_ && (layout.width != requestedWidth_ || layout.height != requestedHeight_)) {
+    const HRESULT hr = ring_.requestGeometry(static_cast<uint32_t>(layout.width),
+                                             static_cast<uint32_t>(layout.height),
+                                             rcwin::kFourccNv12);
+    if (SUCCEEDED(hr)) {
+      requestedWidth_ = layout.width;
+      requestedHeight_ = layout.height;
+    } else {
+      RC_WARN(L"could not publish requested geometry: %s", rcwin::hrMessage(hr).c_str());
+    }
+  }
+
   if (ringReady_ && ring_.millisSinceLastWrite() <= kStaleAfterMillis) {
     // Staged through a scratch buffer rather than read straight into `dst`, because the
     // producer's stride is its own business and need not match the stride Media
@@ -74,13 +88,12 @@ bool FrameSource::fill(uint8_t* dst, const rcwin::Nv12Layout& layout, uint64_t f
         }
         live = true;
       } else if (!mismatchLogged_) {
-        // Geometry negotiation is an M2 concern; until the pipeline can rescale, a
-        // mismatched producer is a configuration error worth saying out loud rather
-        // than silently showing a scrambled image. Once, though -- the producer will
-        // keep publishing the wrong size thirty times a second until someone fixes it.
+        // The requested geometry is published above, so a producer that keeps sending
+        // the wrong size is ignoring it rather than guessing wrongly. Still only warn
+        // once -- it would otherwise arrive thirty times a second.
         mismatchLogged_ = true;
-        RC_WARN(L"ring frame is %ux%u fourcc 0x%08X, expected %dx%d NV12 -- ignoring "
-                L"(further mismatches will not be logged)",
+        RC_WARN(L"ring frame is %ux%u fourcc 0x%08X, but %dx%d NV12 was requested -- "
+                L"ignoring (further mismatches will not be logged)",
                 info.width, info.height, info.format, layout.width, layout.height);
       }
     }

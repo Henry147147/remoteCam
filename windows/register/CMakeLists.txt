@@ -7,7 +7,7 @@
 add_executable(rc-vcam-register main.cpp)
 
 target_link_libraries(rc-vcam-register PRIVATE
-    rcwin-common
+    rcwin-common-mt
     mf
     mfplat
     mfuuid
@@ -17,11 +17,16 @@ target_link_libraries(rc-vcam-register PRIVATE
     advapi32
 )
 
-target_compile_options(rc-vcam-register PRIVATE /W4 /permissive-)
+rc_target_strict_warnings(rc-vcam-register)
 
 # rc-vcam-register looks for rc-vcam.dll next to itself, so keep both in one directory.
+# Static CRT for the same reason as rc-vcam: the installer runs this before anything
+# else is guaranteed to be on the machine.
 set_target_properties(rc-vcam-register PROPERTIES
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     RUNTIME_OUTPUT_DIRECTORY         "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
 )
+
+install(TARGETS rc-vcam-register RUNTIME DESTINATION ".")

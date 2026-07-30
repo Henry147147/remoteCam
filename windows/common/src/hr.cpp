@@ -38,6 +38,17 @@ const wchar_t* shortFile(const wchar_t* path) {
 // runs as LOCAL SERVICE, whose profile directory is not somewhere a developer will
 // think to look, and is not the same place the user-session tools would write to.
 std::wstring logDirectory() {
+  const DWORD overrideChars = ::GetEnvironmentVariableW(L"REMOTECAM_LOG_DIRECTORY", nullptr, 0);
+  if (overrideChars > 1) {
+    std::wstring overridePath(static_cast<size_t>(overrideChars), L'\0');
+    const DWORD copied = ::GetEnvironmentVariableW(
+        L"REMOTECAM_LOG_DIRECTORY", overridePath.data(), overrideChars);
+    if (copied == overrideChars - 1) {
+      overridePath.resize(copied);
+      return overridePath;
+    }
+  }
+
   PWSTR base = nullptr;
   if (FAILED(::SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &base))) return {};
   std::wstring dir(base);
@@ -125,6 +136,14 @@ void writeFile(const wchar_t* text) {
 void logInit(const wchar_t* tag) {
   std::lock_guard<std::mutex> lock(g_mutex);
   if (tag && *tag) g_tag = tag;
+}
+
+void logShutdown() {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  if (g_file != INVALID_HANDLE_VALUE) ::CloseHandle(g_file);
+  g_file = INVALID_HANDLE_VALUE;
+  g_fileTried = false;
+  g_written = 0;
 }
 
 void logWrite(LogLevel level, const wchar_t* file, int line, const wchar_t* fmt, ...) {

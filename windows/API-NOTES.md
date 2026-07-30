@@ -1,16 +1,14 @@
 # Windows API notes
 
-Contracts in `windows/` that are not obvious from the signatures, and changes that are
-known to be needed but have been **deliberately deferred** rather than made.
+Contracts in `windows/` that are not obvious from the signatures, including the
+resolution of two changes that were previously deliberately deferred.
 
 This file exists because `windows/` is now consumed by more than one thing at a time —
-`rc-vcam.dll`, the tools, and soon the Qt app and the OBS plugin — so a contract that
-lives only in one caller's head is a contract that will be broken. Anything here that
-says "deferred" is a real change someone will eventually have to make; make it
-deliberately, in its own commit, and update this file.
+`rc-vcam.dll`, the tools, and the Qt app, with the OBS plugin still to come — so a
+contract that lives only in one caller's head is a contract that will be broken.
 
-Nothing in this file affects `core/` or `docs/protocol.md`. Those are the surfaces
-shared with the iOS side, and they are unchanged.
+This file documents the Windows bindings around the portable contracts in `core/` and
+`docs/protocol.md`; those shared surfaces remain authoritative for wire behavior.
 
 ---
 
@@ -45,56 +43,64 @@ On `S_OK`, callers may rely on: even dimensions within `kRingMaxWidth`/`kRingMax
 
 ---
 
-## Deferred: single-producer enforcement
+## Single-producer enforcement — done, ring version 3
 
-`writeFrame` advances `writeSeq` with a plain read-modify-write. Two processes
-publishing concurrently will interleave into the same slot and corrupt it, silently —
+`writeFrame` advances `writeSeq` with a plain read-modify-write, so two processes
+publishing concurrently would interleave into the same slot and corrupt it silently;
 the seqlock protects readers from a *writer*, not writers from each other.
 
-Today this is a documented invariant with nothing enforcing it. Running two
-`rc-fakewriter` instances is enough to violate it.
+`open(writable)` now enforces it. The header carries an `ownerPid` claim plus the
+claimant's process creation time, taken under the existing write guard. A second writer
+gets `ERROR_ALREADY_EXISTS` rather than succeeding, and `close()` releases the claim.
 
-Considered and rejected for now:
+Two details that are load-bearing:
 
-- **`InterlockedIncrement` on `writeSeq`.** Cheapest, and wrong: the sequence has to be
-  published *after* the pixels land, so making the increment atomic does not stop two
-  writers picking the same slot and memcpy-ing over each other.
-- **A named mutex around the write.** Correct, but the mutex would have to live in the
-  `Global\` namespace and therefore be created by the DLL, which drags the privilege
-  problem into a second object and adds a cross-session acquire to every frame.
-- **An `ownerPid` claim field in the header.** Cheap and lock-free, but a producer that
-  crashes never releases its claim, so it needs liveness detection (open a handle to
-  the recorded pid and check it) to avoid wedging the ring until reboot.
+- **The start time is not decoration.** Windows recycles pids. `ownerPid` alone would
+  let an unrelated live process look like our dead producer and wedge the ring until
+  reboot, which is exactly the liveness problem that kept this deferred.
+- **There is no exception for our own pid.** Two `FrameRing` instances in one process
+  are the same bug as two processes, and the shared header cannot tell them apart. A
+  legitimate reopen has already released its claim in `open()`'s leading `close()`.
 
-The `ownerPid` approach is the likely answer. It would change `open()`'s contract — a
-second writer would start failing where it currently succeeds — so it belongs in its
-own commit, with `open()`'s documentation updated and a test that a crashed producer
-does not lock the ring permanently.
+A claim we cannot inspect — a producer in another user's session, where `OpenProcess`
+returns `ERROR_ACCESS_DENIED` — counts as **live**. Refusing to start is better than
+two producers interleaving, which is invisible until someone looks at the video.
 
-**Until then, each producer guards itself.** `rc-fakewriter` holds
-`Local\RemoteCam.FakeWriter.Single` and refuses to start twice, which covers the one
-way anyone is realistically going to hit this. The Qt client will need the same when it
-lands. This is a guard per producer, not enforcement in the ring — two *different*
-producers would still collide.
+Crash recovery is tested for real: `testRingReclaimsCrashedProducer` spawns a child,
+waits for it to claim the ring, `TerminateProcess`es it, and asserts a successor can
+open. A simulated dead pid would only have tested the simulation.
+
+`rc-fakewriter` keeps its `Local\RemoteCam.FakeWriter.Single` guard. It now produces a
+better message than the ring's refusal would, rather than being the only thing standing
+between two writers and a corrupt slot.
 
 ---
 
-## Deferred: geometry negotiation
+## Geometry negotiation — done, ring version 3
 
-`rc-vcam.dll` advertises exactly one media type (NV12 1920×1080 @ 30) and
-`FrameSource::fill` discards any ring frame whose dimensions do not match, logging a
-warning. That is correct for M1 and untenable once the format ladder from PLAN.md §1
-lands: the consumer picks the resolution, and the producer currently has no way to
-learn what was picked.
+`FrameSource::fill` used to discard any ring frame whose dimensions did not match the
+one advertised media type, log once, and leave the producer with no way to find out
+what was wanted.
 
-The ring header already carries `width`/`height`/`stride`/`formatGeneration`, but they
-are written by the *producer* and read by the consumer — the wrong direction for this.
-Negotiation needs the DLL to publish the requested geometry and the producer to read
-it, which is a new field group and a new contract, not a tweak.
+The header's `width`/`height`/`stride`/`formatGeneration` are written by the *producer*
+and describe what it last sent — the wrong direction. Version 3 adds the other
+direction: `requestedWidth`/`requestedHeight`/`requestedFormat`/`requestedGeneration`,
+written by the consumer through `FrameRing::requestGeometry` and read by the producer
+through `FrameRing::requestedGeometry`.
 
-Do not work around this by having the producer guess, or by scaling in `FrameSource` —
-the transform and scaling belong in the D3D11 pipeline (M2), on the producer side,
-where `rc::transform`'s matrix is already available.
+- **Consumer-only.** `requestGeometry` returns `E_ACCESSDENIED` for a producer; a
+  producer writing it would be talking to itself.
+- **Cleared on a new consumer generation.** The departing consumer's choice says
+  nothing about what the arriving one wants, so `requestedGeneration` goes back to 0
+  and the producer sees `S_FALSE` again.
+- Media Foundation hands `FrameSource` the layout per frame, so that is where the
+  negotiated geometry is actually known. It is published on change, not per frame.
+- The producer validates any request before adopting it — an absurd geometry must not
+  walk it off the end of a ring slot.
+
+Still true, and still the rule: **scaling belongs in the D3D11 pipeline**, on the
+producer side where `rc::transform`'s matrix already is. Negotiation tells the producer
+what to render; it is not a licence to rescale inside `FrameSource`.
 
 ---
 
@@ -160,12 +166,12 @@ redistributable or Apple's restricted multicast entitlement.
 
 The current integration port is TCP **7890** (`BonjourAdvertiser::kDefaultPort`). The
 manual IP/port screen on iOS remains available and must use the same listener port.
-The Qt shell deliberately remains in **Waiting for network receiver** and does not call
-`BonjourAdvertiser::start()` yet: there is no TCP receiver in this repository, and
-advertising a closed port is a false-success discovery failure. When the production
-Windows receiver lands, it must bind that port, set `TCP_NODELAY` on accepted phone
-connections, and only then call `start()` (or pass a replacement bound port into the
-advertiser in the same change).
+The Qt app starts `TcpListener` first and calls `BonjourAdvertiser::start()` only
+after `listen()` succeeds, so it never advertises a closed endpoint. The listener
+allows one phone at a time, sets `TCP_NODELAY`, bounds framing through `rc::wire`, and
+closes malformed sessions. A production connection currently receives
+`server_info {paired:false}` and no `ready`; pairing/authentication is intentionally
+still a hard gate.
 
 TXT fields are the protocol-defined `v`, `name`, `id`, and `caps`. `id` is persisted
 with `QSettings` under the current user and is exactly 16 lowercase hexadecimal
@@ -174,6 +180,6 @@ identity. The registration is process-scoped; Windows removes it when the Qt app
 exits. The DNS callback returns on an arbitrary thread and must marshal UI state back
 to the Qt thread.
 
-The installer/backend still needs an inbound Windows Firewall rule for the TCP
-listener. DNS-SD can make the PC appear on the iPhone while a blocked TCP port makes
-connection attempts time out, so these are separate manual verification checks.
+The installer adds an inbound TCP 7890 rule scoped to the private firewall profile
+and `RemoteCam.exe`, and removes that exact rule during uninstall. DNS-SD visibility
+and TCP reachability remain separate physical-device verification checks.

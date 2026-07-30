@@ -1,0 +1,21 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  cert-*,
+  concurrency-*,
+  performance-*,
+  cppcoreguidelines-avoid-goto,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-pro-type-const-cast,
+  cppcoreguidelines-pro-type-static-cast-downcast,
+  readability-container-size-empty,
+  readability-redundant-*,
+  readability-simplify-boolean-expr,
+  readability-static-accessed-through-instance
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(^|.*[\\/])core[\\/]include[\\/]'
+AnalyzeTemporaryDtors: false
+FormatStyle: none
+...

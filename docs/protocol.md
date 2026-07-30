@@ -4,8 +4,11 @@ The contract between the iPhone app and the Windows client. Both sides are writt
 against this document rather than against each other, so it is normative: if the
 implementations disagree with this file, the file is right.
 
-Status: **draft**, unimplemented. Nothing ships until `core/` has a codec for it and
-round-trip tests pass.
+Status: **partially implemented**. The 16-byte framing, deterministic CBOR,
+control/capability messages, and Annex-B validation are implemented in the portable
+C++ core and iOS client with round-trip tests. Pairing, authentication, and media
+encryption remain draft; the production Windows app therefore reports `paired:false`
+and withholds `ready` instead of starting an insecure session.
 
 ## Design constraints
 

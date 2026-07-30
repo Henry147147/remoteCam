@@ -14,7 +14,7 @@ add_library(rc-vcam SHARED
 )
 
 target_link_libraries(rc-vcam PRIVATE
-    rcwin-common
+    rcwin-common-mt
     mf
     mfplat
     mfuuid      # defines the MF_DEVICESTREAM_* attribute GUIDs
@@ -22,13 +22,18 @@ target_link_libraries(rc-vcam PRIVATE
     oleaut32
 )
 
-target_compile_options(rc-vcam PRIVATE /W4 /permissive-)
+rc_target_strict_warnings(rc-vcam)
 
 # The Frame Server looks up the file by the absolute path recorded in InprocServer32,
 # so the output name has to match what rc-vcam-register.exe expects to find.
+#
+# Static CRT: see windows/common/CMakeLists.txt. A missing msvcp140.dll here is a
+# camera that registers and enumerates and then never delivers a frame, diagnosable
+# only from rc-vcam.log -- so the dependency does not get to exist.
 set_target_properties(rc-vcam PROPERTIES
     OUTPUT_NAME "rc-vcam"
     PREFIX ""
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     LIBRARY_OUTPUT_DIRECTORY         "${CMAKE_BINARY_DIR}/bin"
     LIBRARY_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_BINARY_DIR}/bin"
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
@@ -36,3 +41,8 @@ set_target_properties(rc-vcam PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
 )
+
+# Flat install root: rc-vcam-register.exe resolves rc-vcam.dll next to itself, and the
+# path it writes into InprocServer32 is absolute, so the two must land together.
+# Naming only RUNTIME keeps the import library out of the package.
+install(TARGETS rc-vcam RUNTIME DESTINATION ".")

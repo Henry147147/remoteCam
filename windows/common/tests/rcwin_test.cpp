@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "rcwin/nv12.h"
+#include "rcwin/hr.h"
 #include "rcwin/shm_ring.h"
 #include "rcwin/test_pattern.h"
 
@@ -30,6 +31,8 @@ namespace {
 
 int g_failures = 0;
 int g_checks = 0;
+
+constexpr wchar_t kChildProducerReadyEvent[] = L"Local\\RemoteCam.Test.ChildProducerReady";
 
 void check(bool ok, const std::string& what) {
   ++g_checks;
@@ -65,6 +68,68 @@ uint64_t hashLumaRows(const uint8_t* nv12, const rcwin::Nv12Layout& layout, int 
                  static_cast<size_t>(layout.width), hash);
   }
   return hash;
+}
+
+// ---------------------------------------------------------------------------
+
+void testHrAndLogHelpers() {
+  std::printf("HRESULT, module path and bounded log\n");
+
+  const std::wstring accessDenied = rcwin::hrMessage(E_ACCESSDENIED);
+  check(accessDenied.find(L"0x80070005") != std::wstring::npos,
+        "hrMessage always includes the numeric HRESULT");
+  check(accessDenied.size() > std::wstring(L"0x80070005").size(),
+        "hrMessage adds the system explanation when one exists");
+
+  const std::wstring self = rcwin::modulePath();
+  check(!self.empty(), "modulePath returns the running test executable");
+  check(::GetFileAttributesW(self.c_str()) != INVALID_FILE_ATTRIBUTES,
+        "modulePath names a file that exists");
+
+  wchar_t tempRoot[MAX_PATH] = {};
+  const DWORD rootLength = ::GetTempPathW(ARRAYSIZE(tempRoot), tempRoot);
+  check(rootLength > 0 && rootLength < ARRAYSIZE(tempRoot), "temporary path is available");
+  if (rootLength == 0 || rootLength >= ARRAYSIZE(tempRoot)) return;
+
+  std::wstring directory(tempRoot);
+  directory += L"RemoteCam-log-test-" + std::to_wstring(::GetCurrentProcessId());
+  ::CreateDirectoryW(directory.c_str(), nullptr);
+  check(::SetEnvironmentVariableW(L"REMOTECAM_LOG_DIRECTORY", directory.c_str()) != 0,
+        "test log directory override is set");
+
+  const std::wstring current = directory + L"\\rotation.log";
+  const std::wstring previous = current + L".1";
+  HANDLE seed = ::CreateFileW(current.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+  check(seed != INVALID_HANDLE_VALUE, "created a log at the rotation boundary");
+  if (seed != INVALID_HANDLE_VALUE) {
+    LARGE_INTEGER size{};
+    size.QuadPart = 4ll * 1024 * 1024;
+    check(::SetFilePointerEx(seed, size, nullptr, FILE_BEGIN) != 0 && ::SetEndOfFile(seed) != 0,
+          "seed log is exactly four MiB");
+    ::CloseHandle(seed);
+  }
+
+  rcwin::logInit(L"rotation");
+  RC_LOG(L"first line after the cap");
+  rcwin::logShutdown();
+
+  WIN32_FILE_ATTRIBUTE_DATA oldInfo{};
+  check(::GetFileAttributesExW(previous.c_str(), GetFileExInfoStandard, &oldInfo) != 0,
+        "the capped log rotates to .1 before append");
+  if (::GetFileAttributesExW(previous.c_str(), GetFileExInfoStandard, &oldInfo)) {
+    const uint64_t oldBytes = (static_cast<uint64_t>(oldInfo.nFileSizeHigh) << 32) |
+                              oldInfo.nFileSizeLow;
+    check(oldBytes == 4ull * 1024 * 1024, "the previous generation is preserved intact");
+  }
+  WIN32_FILE_ATTRIBUTE_DATA newInfo{};
+  check(::GetFileAttributesExW(current.c_str(), GetFileExInfoStandard, &newInfo) != 0,
+        "a fresh current log is created");
+
+  ::DeleteFileW(current.c_str());
+  ::DeleteFileW(previous.c_str());
+  ::RemoveDirectoryW(directory.c_str());
+  ::SetEnvironmentVariableW(L"REMOTECAM_LOG_DIRECTORY", nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -504,9 +569,154 @@ void testRingTracksConsumerLifetime() {
         "reconnected producer writes successfully");
 }
 
+void testRingEnforcesSingleProducer() {
+  std::printf("Frame ring enforces one producer\n");
+
+  rcwin::FrameRing consumer;
+  check(SUCCEEDED(consumer.create(rcwin::testRingNames())), "consumer creates ring");
+
+  rcwin::FrameRing first;
+  check(SUCCEEDED(first.open(true, rcwin::testRingNames())), "first producer claims the ring");
+
+  rcwin::FrameRing second;
+  checkEq(second.open(true, rcwin::testRingNames()), HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS),
+          "a second producer is refused rather than interleaving frames");
+
+  // Readers are not producers and must never be blocked by the claim -- several
+  // consumers reading at once is the supported case.
+  rcwin::FrameRing reader;
+  check(SUCCEEDED(reader.open(false, rcwin::testRingNames())),
+        "a read-only open is unaffected by the producer claim");
+  reader.close();
+
+  first.close();
+  check(SUCCEEDED(second.open(true, rcwin::testRingNames())),
+        "closing the first producer releases the claim");
+  second.close();
+}
+
+// The case API-NOTES.md named as the reason single-producer enforcement was deferred:
+// a producer that dies without releasing its claim must not wedge the ring until
+// reboot. Terminating a real child process is the only honest way to test it -- a
+// simulated dead pid would be testing the mock.
+void testRingReclaimsCrashedProducer(const wchar_t* selfPath) {
+  std::printf("Frame ring reclaims a crashed producer\n");
+
+  rcwin::FrameRing consumer;
+  check(SUCCEEDED(consumer.create(rcwin::testRingNames())), "consumer creates ring");
+
+  std::wstring commandLine = L"\"";
+  commandLine += selfPath;
+  commandLine += L"\" --hold-producer";
+
+  // The child signals once it holds the claim. Polling with our own open() instead
+  // would race it -- whichever of us called first would take the claim and make the
+  // other fail, which is the very behaviour under test.
+  HANDLE ready = ::CreateEventW(nullptr, TRUE, FALSE, kChildProducerReadyEvent);
+  check(ready != nullptr, "created the child-ready event");
+  if (!ready) return;
+
+  STARTUPINFOW si{};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi{};
+  const BOOL spawned = ::CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, FALSE,
+                                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+  check(spawned != 0, "spawned a child producer");
+  if (!spawned) {
+    ::CloseHandle(ready);
+    return;
+  }
+
+  check(::WaitForSingleObject(ready, 10000) == WAIT_OBJECT_0, "child producer claimed the ring");
+  ::CloseHandle(ready);
+
+  rcwin::FrameRing blocked;
+  checkEq(blocked.open(true, rcwin::testRingNames()), HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS),
+          "the child producer's claim is visible across processes");
+
+  ::TerminateProcess(pi.hProcess, 1);
+  ::WaitForSingleObject(pi.hProcess, 5000);
+  ::CloseHandle(pi.hThread);
+  ::CloseHandle(pi.hProcess);
+
+  rcwin::FrameRing successor;
+  check(SUCCEEDED(successor.open(true, rcwin::testRingNames())),
+        "a killed producer's claim is reclaimed, not left wedged");
+  successor.close();
+}
+
+void testRingGeometryNegotiation() {
+  std::printf("Frame ring negotiates geometry consumer -> producer\n");
+
+  rcwin::FrameRing consumer;
+  check(SUCCEEDED(consumer.create(rcwin::testRingNames())), "consumer creates ring");
+  rcwin::FrameRing producer;
+  check(SUCCEEDED(producer.open(true, rcwin::testRingNames())), "producer opens ring");
+
+  uint32_t width = 0, height = 0, format = 0;
+  checkEq(producer.requestedGeometry(width, height, format), S_FALSE,
+          "no geometry is requested before a consumer asks for one");
+
+  check(SUCCEEDED(consumer.requestGeometry(1280, 720, rcwin::kFourccNv12)),
+        "consumer requests a geometry");
+  checkEq(producer.requestedGeometry(width, height, format), S_OK,
+          "producer sees that a geometry was requested");
+  checkEq(width, 1280u, "requested width crosses the ring");
+  checkEq(height, 720u, "requested height crosses the ring");
+  checkEq(format, rcwin::kFourccNv12, "requested fourcc crosses the ring");
+
+  check(SUCCEEDED(consumer.requestGeometry(1920, 1080, rcwin::kFourccNv12)),
+        "consumer changes its mind mid-stream");
+  checkEq(producer.requestedGeometry(width, height, format), S_OK, "second request readable");
+  checkEq(width, 1920u, "changed width crosses the ring");
+  checkEq(height, 1080u, "changed height crosses the ring");
+
+  // The direction is one-way on purpose: the header's width/height say what the
+  // producer last sent, and a producer overwriting the request would be talking to
+  // itself.
+  checkEq(producer.requestGeometry(640, 480, rcwin::kFourccNv12), E_ACCESSDENIED,
+          "a producer cannot request its own geometry");
+
+  checkEq(consumer.requestGeometry(0, 720, rcwin::kFourccNv12), E_INVALIDARG,
+          "zero width is rejected");
+  checkEq(consumer.requestGeometry(rcwin::kRingMaxWidth + 2, 720, rcwin::kFourccNv12),
+          E_INVALIDARG, "a geometry larger than a ring slot is rejected");
+
+  // A new consumer generation starts with no request: the departing consumer's choice
+  // says nothing about what the arriving one wants.
+  producer.close();
+  consumer.close();
+  rcwin::FrameRing replacement;
+  check(SUCCEEDED(replacement.create(rcwin::testRingNames())), "replacement consumer attaches");
+  rcwin::FrameRing newProducer;
+  check(SUCCEEDED(newProducer.open(true, rcwin::testRingNames())), "new producer opens");
+  checkEq(newProducer.requestedGeometry(width, height, format), S_FALSE,
+          "a new consumer generation clears the previous request");
+}
+
+// Child mode for testRingReclaimsCrashedProducer: claim the ring, say so, block until
+// killed. Never exits on its own -- the parent's TerminateProcess is the point.
+int holdProducerUntilKilled() {
+  rcwin::FrameRing producer;
+  if (FAILED(producer.open(true, rcwin::testRingNames()))) return 1;
+  if (HANDLE ready = ::OpenEventW(EVENT_MODIFY_STATE, FALSE, kChildProducerReadyEvent)) {
+    ::SetEvent(ready);
+    ::CloseHandle(ready);
+  }
+  for (;;) ::Sleep(1000);
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+  if (argc > 1 && std::strcmp(argv[1], "--hold-producer") == 0) {
+    return holdProducerUntilKilled();
+  }
+
+  wchar_t selfPath[MAX_PATH] = {};
+  ::GetModuleFileNameW(nullptr, selfPath, MAX_PATH);
+
+  testHrAndLogHelpers();
   testNv12Layout();
   testFillRectClipping();
   testPatternDeterminism();
@@ -515,6 +725,9 @@ int main() {
   testRingRejectsHostileGeometry();
   testRingSeqlockUnderContention();
   testRingTracksConsumerLifetime();
+  testRingEnforcesSingleProducer();
+  testRingReclaimsCrashedProducer(selfPath);
+  testRingGeometryNegotiation();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

@@ -26,6 +26,9 @@ enum class LogLevel { Debug, Info, Warn, Error };
 // filename and a column in every line, so interleaved logs stay readable.
 void logInit(const wchar_t* tag);
 void logWrite(LogLevel level, const wchar_t* file, int line, const wchar_t* fmt, ...);
+// Flushes and closes the process log. Components normally rely on process teardown;
+// tests and orderly app shutdown use this when they need to move/delete the file.
+void logShutdown();
 
 // Human-readable form of an HRESULT, falling back to hex when the system has no
 // message for it -- which is common for the MF_E_* range.

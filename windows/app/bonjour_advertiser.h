@@ -43,6 +43,9 @@ class BonjourAdvertiser final : public QObject {
   quint16 port() const { return kDefaultPort; }
 
   void start();
+  // Keeps the discovery card truthful when bind/listen fails. The caller must not
+  // call start() after this without first constructing a new receiver.
+  void setReceiverFailure(const QString& detail);
 
  signals:
   void stateChanged();

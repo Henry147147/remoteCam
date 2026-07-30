@@ -44,6 +44,12 @@ class FrameSource {
   bool lastWasLive_ = false;
   bool everLogged_ = false;
   bool mismatchLogged_ = false;
+
+  // What we last told the producer we want. Media Foundation hands us the layout per
+  // frame, so this is where the negotiated geometry is actually known; publishing it
+  // once per change keeps the ring write off the per-frame path.
+  int requestedWidth_ = 0;
+  int requestedHeight_ = 0;
 };
 
 // How long a published frame stays usable before we fall back to the placeholder.

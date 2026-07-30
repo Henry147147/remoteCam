@@ -47,6 +47,20 @@ struct RingHeader {
   std::atomic<uint32_t> consumerGeneration;
   uint32_t reserved0;
 
+  // The single-producer claim. ownerPid alone is not enough -- Windows recycles pids,
+  // and a recycled one would make a live stranger's process look like our dead
+  // producer. The creation time pins the identity.
+  std::atomic<uint32_t> ownerPid;
+  std::atomic<uint64_t> ownerStartTime;   // FILETIME of process creation
+
+  // What the consumer asked for, as opposed to width/height/stride above, which record
+  // what the producer last sent. Generation lets a producer notice a change without
+  // comparing three fields.
+  std::atomic<uint32_t> requestedWidth;
+  std::atomic<uint32_t> requestedHeight;
+  std::atomic<uint32_t> requestedFormat;
+  std::atomic<uint32_t> requestedGeneration;
+
   std::atomic<uint64_t> writeSeq;      // frames ever published; 0 means "none yet"
   std::atomic<uint64_t> lastWriteQpc;
 
@@ -112,6 +126,48 @@ uint64_t qpcFrequency() {
   return freq;
 }
 
+// FILETIME of this process's creation, as a single 64-bit value. Zero if it cannot be
+// read, which is treated as "no identity" and therefore never matches a live claim.
+uint64_t processStartTime(HANDLE process) {
+  FILETIME creation{}, exit{}, kernel{}, user{};
+  if (!::GetProcessTimes(process, &creation, &exit, &kernel, &user)) return 0;
+  return (static_cast<uint64_t>(creation.dwHighDateTime) << 32) | creation.dwLowDateTime;
+}
+
+uint64_t currentProcessStartTime() {
+  static const uint64_t start = processStartTime(::GetCurrentProcess());
+  return start;
+}
+
+// Is the process that claimed the ring still running and still the same process?
+//
+// Deliberately conservative: a claim we cannot inspect counts as alive. Stealing a ring
+// from a producer that is merely in another session is worse than refusing to start,
+// because the symptom -- two producers interleaving frames -- is exactly what the claim
+// exists to prevent, and it is invisible until someone looks at the video.
+bool producerClaimIsLive(uint32_t pid, uint64_t startTime) {
+  if (pid == 0) return false;
+
+  HANDLE process = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (!process) {
+    const DWORD err = ::GetLastError();
+    // These two mean "no such process"; anything else (notably ERROR_ACCESS_DENIED)
+    // means one exists that we simply cannot look at.
+    if (err == ERROR_INVALID_PARAMETER || err == ERROR_NOT_FOUND) return false;
+    return true;
+  }
+
+  DWORD exitCode = 0;
+  const bool gotExit = ::GetExitCodeProcess(process, &exitCode) != 0;
+  const uint64_t actualStart = processStartTime(process);
+  ::CloseHandle(process);
+
+  if (gotExit && exitCode != STILL_ACTIVE) return false;
+  // A pid that has been recycled belongs to somebody else, so the claim is stale.
+  if (startTime != 0 && actualStart != 0 && actualStart != startTime) return false;
+  return true;
+}
+
 bool hasActiveConsumer(const RingHeader* h) {
   const uint32_t count = h->consumerCount.load(std::memory_order_acquire);
   return count != 0;
@@ -140,6 +196,39 @@ HRESULT lockWriteGuard(HANDLE guard, DWORD timeoutMillis = 5000) {
   if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED) return S_OK;
   if (wait == WAIT_TIMEOUT) return HRESULT_FROM_WIN32(ERROR_TIMEOUT);
   return RC_HR_FROM_LAST_ERROR();
+}
+
+// The rights the ring actually uses. Asking for exactly these, and never for
+// SECTION_ALL_ACCESS, is what makes attaching work for a caller who is not LOCAL
+// SERVICE -- see CreateFileMapping2 below.
+constexpr DWORD kSectionAccess = FILE_MAP_READ | FILE_MAP_WRITE;
+constexpr DWORD kEventAccess = EVENT_MODIFY_STATE | SYNCHRONIZE;
+constexpr DWORD kGuardAccess = SYNCHRONIZE | MUTEX_MODIFY_STATE;
+
+// Attaching to an existing ring cannot go through CreateFileMappingW.
+//
+// When the name already exists, CreateFileMapping asks the object for
+// SECTION_ALL_ACCESS, which includes DELETE and WRITE_OWNER. kSddl grants those to
+// nobody below Administrators, so an ordinary interactive user gets ERROR_ACCESS_DENIED
+// -- while still being able to create the *first* ring, because a brand-new object is
+// never access-checked against its own DACL. The result is a create() that works
+// exactly once per name and then fails forever, with the entire attach path below it
+// unreachable. CreateEvent and CreateMutex have the identical flaw, which is the whole
+// reason the ...Ex forms exist. CreateFileMapping2 is the section equivalent: it asks
+// for only FILE_MAP_READ | FILE_MAP_WRITE whether it creates or attaches. Windows 11
+// is the project floor; onecore.lib is the documented import library for this API.
+HRESULT openOrCreateSection(SECURITY_ATTRIBUTES& sa, const wchar_t* name, HANDLE& out,
+                            bool& existed) {
+  // Success for a newly created object does not promise to clear last-error. Seed it
+  // so a stale ERROR_ALREADY_EXISTS from an earlier Win32 call cannot make us treat a
+  // fresh, zero-filled mapping as an initialized ring.
+  ::SetLastError(ERROR_SUCCESS);
+  out = ::CreateFileMapping2(INVALID_HANDLE_VALUE, &sa, kSectionAccess, PAGE_READWRITE,
+                             SEC_COMMIT, kSectionBytes, name, nullptr, 0);
+  const DWORD error = ::GetLastError();
+  if (!out) return HRESULT_FROM_WIN32(error);
+  existed = error == ERROR_ALREADY_EXISTS;
+  return S_OK;
 }
 
 // Builds SECURITY_ATTRIBUTES from kSddl. The descriptor must outlive the create call,
@@ -188,6 +277,19 @@ void FrameRing::close() {
              hrMessage(guardHr).c_str());
     }
   }
+  if (producerClaim_ && view_) {
+    const HRESULT guardHr = lockWriteGuard(writeGuard_);
+    RingHeader* h = headerOf(view_);
+    // Only clear a claim that is still ours. A producer we were reclaimed from while
+    // stalled must not have its successor's claim wiped out by our close.
+    if (h->ownerPid.load(std::memory_order_acquire) == ::GetCurrentProcessId() &&
+        h->ownerStartTime.load(std::memory_order_relaxed) == currentProcessStartTime()) {
+      h->ownerStartTime.store(0, std::memory_order_relaxed);
+      h->ownerPid.store(0, std::memory_order_release);
+    }
+    if (SUCCEEDED(guardHr)) ::ReleaseMutex(writeGuard_);
+  }
+  producerClaim_ = false;
   if (view_) {
     ::UnmapViewOfFile(view_);
     view_ = nullptr;
@@ -215,36 +317,44 @@ HRESULT FrameRing::create(RingNames names) {
   PSECURITY_DESCRIPTOR sd = nullptr;
   RC_RETURN_IF_FAILED(makeSecurityAttributes(sa, sd));
 
-  const LARGE_INTEGER size = {{static_cast<DWORD>(kSectionBytes & 0xFFFFFFFFull),
-                               static_cast<LONG>(kSectionBytes >> 32)}};
-
-  section_ = ::CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
-                                  static_cast<DWORD>(size.HighPart),
-                                  static_cast<DWORD>(size.LowPart), names.section);
-  const DWORD createErr = ::GetLastError();
-  if (!section_) {
+  bool existed = false;
+  const HRESULT sectionHr = openOrCreateSection(sa, names.section, section_, existed);
+  if (FAILED(sectionHr)) {
     ::LocalFree(sd);
-    const HRESULT hr = HRESULT_FROM_WIN32(createErr);
-    if (createErr == ERROR_ACCESS_DENIED) {
-      RC_ERR(L"CreateFileMapping(%s) denied. Global\\ sections require "
-             L"SeCreateGlobalPrivilege -- this process is neither a service nor elevated.",
-             names.section);
+    if (sectionHr == HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED)) {
+      // Two very different causes share this code, and sending the reader after the
+      // wrong one costs hours. Global\ names really do need the privilege; Local\ ones
+      // never did, so there the DACL is what to look at.
+      const bool global = names.section != nullptr && ::wcsncmp(names.section, L"Global\\", 7) == 0;
+      if (global) {
+        RC_ERR(L"cannot create %s: Global\\ sections require SeCreateGlobalPrivilege "
+               L"-- this process is neither a service nor elevated.",
+               names.section);
+      } else {
+        RC_ERR(L"cannot open or create %s: access denied by the section's DACL, not by "
+               L"privilege -- a Local\\ name needs none.",
+               names.section);
+      }
     } else {
-      RC_ERR(L"CreateFileMapping(%s) failed: %s", names.section, hrMessage(hr).c_str());
+      RC_ERR(L"cannot open or create %s: %s", names.section,
+             hrMessage(sectionHr).c_str());
     }
-    return hr;
+    return sectionHr;
   }
-  const bool existed = createErr == ERROR_ALREADY_EXISTS;
 
-  event_ = ::CreateEventW(&sa, FALSE /* auto-reset */, FALSE, names.event);
+  // The Ex forms take a desired access; the plain CreateEvent/CreateMutex ask for
+  // ALL_ACCESS on an object that already exists, which kSddl denies to the interactive
+  // user. Same defect as the section above, with a first-party fix.
+  // Flags 0 == auto-reset, initially non-signalled, matching the old CreateEventW call.
+  event_ = ::CreateEventExW(&sa, names.event, 0, kEventAccess);
   if (!event_) {
     ::LocalFree(sd);
     const HRESULT hr = RC_HR_FROM_LAST_ERROR();
-    RC_ERR(L"CreateEvent(%s) failed: %s", names.event, hrMessage(hr).c_str());
+    RC_ERR(L"CreateEventEx(%s) failed: %s", names.event, hrMessage(hr).c_str());
     close();
     return hr;
   }
-  writeGuard_ = ::CreateMutexW(&sa, FALSE, names.writeGuard);
+  writeGuard_ = ::CreateMutexExW(&sa, names.writeGuard, 0, kGuardAccess);
   ::LocalFree(sd);
   if (!writeGuard_) {
     const HRESULT hr = RC_HR_FROM_LAST_ERROR();
@@ -294,6 +404,12 @@ HRESULT FrameRing::create(RingNames names) {
           h->consumerGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
       if (next == 0) h->consumerGeneration.store(1, std::memory_order_relaxed);
       resetPublishedFrames(h);
+      // The previous consumer's requested geometry belongs to a generation that is
+      // over. The arriving consumer declares its own.
+      h->requestedWidth.store(0, std::memory_order_relaxed);
+      h->requestedHeight.store(0, std::memory_order_relaxed);
+      h->requestedFormat.store(0, std::memory_order_relaxed);
+      h->requestedGeneration.store(0, std::memory_order_relaxed);
       h->consumerCount.store(1, std::memory_order_release);
       RC_LOG(L"reopened ring %s for a new camera-consumer generation", names.section);
     } else {
@@ -370,8 +486,67 @@ HRESULT FrameRing::open(bool writable, RingNames names) {
     close();
     return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
   }
+
+  if (writable) {
+    // Take the single-producer claim, or refuse. Note there is no exception for our own
+    // pid: a second FrameRing in this process is the same bug as a second process, and
+    // a legitimate reopen has already released its claim in the close() above.
+    RingHeader* mutableHeader = headerOf(view_);
+    const uint32_t claimPid = mutableHeader->ownerPid.load(std::memory_order_acquire);
+    const uint64_t claimStart = mutableHeader->ownerStartTime.load(std::memory_order_relaxed);
+    if (producerClaimIsLive(claimPid, claimStart)) {
+      RC_WARN(L"ring already has a producer (pid %u); refusing to open a second writer",
+              claimPid);
+      ::ReleaseMutex(writeGuard_);
+      close();
+      return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS);
+    }
+    if (claimPid != 0) {
+      RC_LOG(L"reclaiming the ring from producer pid %u, which is gone", claimPid);
+    }
+    mutableHeader->ownerStartTime.store(currentProcessStartTime(), std::memory_order_relaxed);
+    mutableHeader->ownerPid.store(::GetCurrentProcessId(), std::memory_order_release);
+    producerClaim_ = true;
+  }
+
   consumerGeneration_ = h->consumerGeneration.load(std::memory_order_acquire);
   if (writable) ::ReleaseMutex(writeGuard_);
+  return S_OK;
+}
+
+HRESULT FrameRing::requestGeometry(uint32_t width, uint32_t height, uint32_t format) {
+  RC_RETURN_HR_IF(!valid(), HRESULT_FROM_WIN32(ERROR_INVALID_STATE));
+  // Consumer-only. A producer that called this would be telling itself what to send.
+  RC_RETURN_HR_IF(!owner_, E_ACCESSDENIED);
+  RC_RETURN_HR_IF(width == 0 || height == 0 || format == 0, E_INVALIDARG);
+  RC_RETURN_HR_IF(width > kRingMaxWidth || height > kRingMaxHeight, E_INVALIDARG);
+
+  RingHeader* h = headerOf(view_);
+  if (h->requestedWidth.load(std::memory_order_relaxed) == width &&
+      h->requestedHeight.load(std::memory_order_relaxed) == height &&
+      h->requestedFormat.load(std::memory_order_relaxed) == format) {
+    return S_OK;
+  }
+
+  h->requestedWidth.store(width, std::memory_order_relaxed);
+  h->requestedHeight.store(height, std::memory_order_relaxed);
+  h->requestedFormat.store(format, std::memory_order_relaxed);
+  // Generation 0 is reserved for "nothing requested yet", so skip it on wrap.
+  const uint32_t next = h->requestedGeneration.fetch_add(1, std::memory_order_release) + 1;
+  if (next == 0) h->requestedGeneration.store(1, std::memory_order_release);
+  RC_LOG(L"consumer requests %ux%u fourcc 0x%08X", width, height, format);
+  return S_OK;
+}
+
+HRESULT FrameRing::requestedGeometry(uint32_t& width, uint32_t& height,
+                                     uint32_t& format) const {
+  RC_RETURN_HR_IF(!valid(), HRESULT_FROM_WIN32(ERROR_INVALID_STATE));
+
+  const RingHeader* h = headerOf(view_);
+  if (h->requestedGeneration.load(std::memory_order_acquire) == 0) return S_FALSE;
+  width = h->requestedWidth.load(std::memory_order_relaxed);
+  height = h->requestedHeight.load(std::memory_order_relaxed);
+  format = h->requestedFormat.load(std::memory_order_relaxed);
   return S_OK;
 }
 

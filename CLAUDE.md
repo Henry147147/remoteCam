@@ -134,6 +134,13 @@ Researched at project start. Re-discovering any of these costs hours.
   consumers, so one implementation covers Zoom, Teams, Discord, Chrome, OBS and the
   Windows Camera app.
 - Registration needs admin **once at install time**, never at app launch.
+- **`rc-vcam.dll` links the static CRT** and must keep doing so. Session 0 gives no
+  guarantee that `msvcp140.dll` is installed, and app-local copies beside the DLL are
+  not dependably on the loader's search path for a DLL the Frame Server loads. A
+  missing CRT there is a camera that registers, enumerates, and never delivers a
+  frame — the same symptom as the `HKCR` bug and just as expensive to find. Qt is
+  built against the dynamic CRT and MSVC will not link the two (LNK2038), which is
+  why `windows/common/` builds `rcwin-common` twice.
 
 **Codecs**
 - Media Foundation's HEVC decoder requires the user to buy *HEVC Video Extensions*
@@ -198,19 +205,33 @@ still require a physical-device pass.
 
 ## Current status
 
-**Done and verified** — `core/` transform math. `rc::transform` produces the 3×3
-backward map (`destToSource`) that the D3D11 pixel shader consumes: arbitrary-angle
-rotation, independent flips, three fit modes, zoom, pan, and coverage-preserving pan
-clamping. 12,101 assertions pass, including a 264-combination inverse round-trip
-sweep and a per-degree check that Fill never exposes an empty corner. Also builds and
-passes under MSVC, not only GCC.
+**Done and verified in automated tests** — the portable transform and protocol
+layers. `rc::transform` produces the exact row-major 3×3 backward map consumed by
+the D3D11 shader. The bounded deterministic-CBOR codec, 16-byte stream framing,
+control messages, and H.264/HEVC Annex-B validation also live in `core/`. The five
+core executables pass 32,438 checks on Windows; the same suite passes under
+ASan+UBSan in WSL. `clang-tidy`, `/W4 /permissive- /WX`, and the MSVC `/analyze`
+configuration are clean.
 
-**Written and building, not yet verified against a live camera** — M1. `rc-vcam.dll`
-(MF media source), `rc-vcam-register.exe`, `rc-vcam-probe.exe` (MF *and* DirectShow),
-`rc-fakewriter.exe`, and the `Global\` frame ring in `windows/common/`. 111 assertions
-pass in `rcwin-common-tests`, including a threaded seqlock contention test. The
-end-to-end check needs an elevated `--register` and a hand pass over the consumer
-matrix; until that has been run, **do not describe M1 as working**.
+**Written and building, not yet verified against a live camera consumer** — M1.
+`rc-vcam.dll`, the registration helper, MF/DirectShow probe, stand-in producer, and
+the `Global\` frame ring all compile. `rcwin-common-tests` now passes all 186 checks,
+including consumer replacement, producer crash recovery, geometry renegotiation,
+and threaded seqlock contention. The remaining proof needs an elevated
+`--register`, the consumer matrix, and the real Session 0 handoff. Until that is run,
+**do not describe M1 as working**.
+
+**Windows receive seams implemented and tested, but not a live production path.**
+The app binds TCP 7890 before advertising Bonjour, accepts one phone with
+`TCP_NODELAY`, and uses the shared wire/control codecs. The production app responds
+to `hello` with `paired: false` and intentionally withholds `ready`; it never opens
+an unauthenticated streaming session. Debug `rc-fakepc --allow-insecure-session` is
+the explicit development-only walking skeleton for exercising controls and validating
+an Annex-B stream; its insecure path is compiled out of Release. The platform library
+contains a D3D11VA FFmpeg decoder factory,
+NV12 D3D11 transform, PTS-preserving pipeline, and ABR controller. It compiles
+against pinned LGPL FFmpeg 8.1.2 and its seam tests pass, but no decoder/GPU hardware
+path or iPhone-to-virtual-camera stream has been run.
 
 **iOS client written and building, not device-verified.** `ios/RemoteCam.xcodeproj`
 contains Bonjour/manual/recent connections, framed TCP and deterministic CBOR,
@@ -222,12 +243,20 @@ missing local provisioning and Developer Mode. Secure pairing, authenticated
 control/media encryption, and USB are blocked on the joint decisions listed in
 `docs/ios-backend-handoff.md`; Release rejects unauthenticated streaming.
 
-**Not started** — the Windows transport/decoder/pipeline/UI, effects, OBS plugin,
-installer, and the shared production pairing/security codec.
+**Installer packaged locally, elevated install still unverified.**
+`RemoteCam-0.1.0-win64.exe` was generated with CPack + NSIS, its archive integrity
+was checked, and the staged self-contained Qt app passed a startup smoke test. The
+installer registers/unregisters the virtual camera and adds/removes a private-profile
+inbound firewall rule for TCP 7890. It has not been elevated and run through the
+Windows consumer matrix, so packaging success is not system integration proof.
 
-Next: finish M1's verification (see `windows/CLAUDE.md`), then build the Windows M0
-listener/Bonjour/decoder and the `rc-fakepc` harness described in the iOS/backend
-handoff. In parallel, settle the normative pairing/authentication details.
+**Not done** — normative pairing/authentication/media encryption, connecting the
+production decoder/transform output to the frame ring, USB, effects, OBS, recorder,
+and physical iPhone/Windows/GPU verification.
+
+Next: settle and implement the shared security contract, join the tested receive
+seams into an authenticated end-to-end path, then run the M1 and physical-device
+matrices in `windows/CLAUDE.md` and `ios/CLAUDE.md`.
 
 ## Two corrections already applied — PLAN.md's original text was wrong
 

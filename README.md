@@ -3,11 +3,13 @@
 Use your iPhone as a webcam on Windows 11. Free, open source, no watermark, no ads,
 no tiers, nothing gated behind a purchase.
 
-**Status: active development.** The iOS capture app and Windows virtual-camera
-foundation now build, but a secure end-to-end stream is not available until the
-Windows listener/decoder and the pairing contract are completed. See [PLAN.md](PLAN.md)
-for milestones and [the iOS/backend handoff](docs/ios-backend-handoff.md) for the
-current integration work.
+**Status: active development.** The iOS capture app, Windows virtual-camera
+foundation, bounded listener, decoder/transform seams, and self-contained installer
+now build. A secure end-to-end stream is not available: production pairing and media
+authentication are still unspecified, and the tested Windows receive seams are not
+yet joined to the virtual-camera sink. See [PLAN.md](PLAN.md) for milestones and
+[the iOS/backend handoff](docs/ios-backend-handoff.md) for the current integration
+work.
 
 ## Why
 
@@ -63,7 +65,7 @@ needs Xcode on macOS. Neither cross-compiles; CI builds them on `windows-latest`
 
 | Path | What |
 |---|---|
-| `core/` | portable C++20: transform math, wire protocol, pairing. No Windows or Qt dependency, by rule. |
+| `core/` | portable C++20: transform math, wire/control codecs, Annex-B validation. No Windows or Qt dependency, by rule. |
 | `windows/` | Qt 6 client, Media Foundation virtual camera, OBS plugin, installer |
 | `ios/` | Swift 6 / SwiftUI capture app |
 | `docs/` | [wire protocol](docs/protocol.md) and architecture notes |

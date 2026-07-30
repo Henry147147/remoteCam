@@ -1,37 +1,38 @@
 # iOS ↔ Windows backend handoff
 
-Status: **action required from the Windows/backend agent**. The iOS app now has a
-real capture, VideoToolbox encode, framed TCP transport, discovery UI, manual camera
-controls, telemetry, reconnect handling, and Live Activity. It cannot complete a
-secure production session until the backend and the underspecified security parts of
-the normative protocol are implemented.
+Status: **Windows seams implemented; joint security and live integration required**.
+The iOS app has capture, VideoToolbox encode, framed TCP transport, discovery UI,
+manual camera controls, telemetry, reconnect handling, and Live Activity. Windows
+now has the bounded listener, codecs, control parsing, decoder/transform seams, ABR,
+Bonjour lifecycle, and an explicit Debug-only insecure development harness whose
+session bypass is compiled out of Release. Neither side can
+complete a secure production session until the underspecified security parts of the
+normative protocol are settled and implemented.
 
 Do not treat this file as a replacement for [`protocol.md`](protocol.md). It records
 the implementation-ready message shapes already emitted by iOS and calls out the
 decisions that must be made jointly before either side can finish the security layer.
 
-## Backend work that can start immediately
+## Backend seam status
 
-1. Add the Windows TCP listener with `TCP_NODELAY` and the 16-byte framing from
-   `protocol.md`. Close on payloads over 16 MiB, nonzero reserved header bytes, or
-   reserved flag bits. Ignore channel 2.
-2. `windows/app` contains the `_remotecam._tcp` advertiser with TXT keys `v`, `name`,
-   `id`, and `caps`. The `id` is exactly 16 lowercase hex characters and is persisted
-   per Windows user so it survives rename, reboot, and IP changes. The Qt shell does
-   not start advertising until a real TCP receiver is bound; the receiver integration
-   must call `BonjourAdvertiser::start()` only after `listen()` succeeds.
-3. Add a bounded CBOR codec and ignore unknown keys/message types. iOS emits RFC 8949
-   deterministic map ordering (shorter encoded text keys first, then lexical byte
-   order) and encodes floating-point camera values as binary64.
-4. Add H.264/HEVC Annex-B receive and decoder plumbing. Each keyframe emitted by iOS
-   includes its parameter sets. Preserve the frame header's monotonic
-   `pts_micros` through diagnostics and the virtual-camera sink.
-5. Send stats at about 2 Hz, including `target_bitrate`. iOS applies that value to
-   `kVTCompressionPropertyKey_AverageBitRate` without rebuilding the encoder.
-6. On `thermal {state: "serious"}` or `"critical"`, choose a format from the phone's
-   advertised capabilities and send `set_format`; prefer 1280×720 at 30 fps. The
-   current protocol has no safe phone-initiated format-change message, so the phone
-   reports the condition and the PC owns the coordinated downshift.
+1. **Done and tested:** the Windows listener sets `TCP_NODELAY`, uses the shared
+   16-byte framing, enforces the 16 MiB and reserved-bit bounds, ignores unknown
+   channels, permits one phone, and stops cleanly.
+2. **Done and tested:** the Qt app binds TCP 7890 before starting the
+   `_remotecam._tcp` advertiser. Its persisted 16-lowercase-hex service ID and the
+   `v`, `name`, `id`, and `caps` TXT keys remain the discovery contract.
+3. **Done and tested:** portable bounded CBOR matches Swift's RFC 7049-style
+   length-first, then bytewise text-key order (not RFC 8949 plain bytewise order),
+   strict UTF-8 and binary64 camera values while tolerating unknown keys/types.
+4. **Seam complete, live path open:** H.264/HEVC Annex-B parameter-set validation,
+   FFmpeg D3D11VA decoder construction, and PTS-preserving pipeline order are tested.
+   The production app does not yet feed decoded output into the virtual-camera ring.
+5. **Policy seam complete:** the ABR controller implements fast backoff and slow
+   recovery, and `rc-fakepc` exercises 2 Hz `stats`/`target_bitrate`. Production stats
+   wait behind the authenticated session state machine.
+6. **Control seam complete:** `set_format`, camera/control messages, telemetry, and
+   caps parse/encode paths are tested and exercised by `rc-fakepc`. Coordinated
+   thermal downshift policy still belongs in the integrated production session.
 
 ## Message shapes emitted by iOS
 
@@ -176,11 +177,12 @@ and the iOS app browses it with `NWBrowser`. Both sides reserve TCP port `7890` 
 current integration build. Manual IP/hostname plus port entry remains available in
 iOS for networks that block Bonjour or isolate clients.
 
-The TCP receiver still needs to bind port `7890`, set `TCP_NODELAY`, accept the iOS
-`hello`, implement the handshake/framing work above, and then start the advertiser.
-The installer also needs an inbound Windows Firewall rule for that listener. Before
-calling discovery verified, run the Qt app on Windows and confirm a physical iPhone
-on the same LAN lists the PC, removes it when the app closes, and can open the
-advertised endpoint. The iOS 27 beta simulator currently reports stale interface
-indexes while browsing host-published mDNS records, so the simulator is not a
-substitute for that physical-device matrix.
+The Qt app now binds port `7890`, sets `TCP_NODELAY`, accepts and parses iOS `hello`,
+then starts the advertiser. It answers `server_info {paired:false}` and deliberately
+withholds `ready`; production handshake work resumes only after the shared security
+contract is normative. The installer adds/removes the private-profile inbound
+firewall rule for that listener. Before calling discovery verified, run the installed
+Qt app on Windows and confirm a physical iPhone on the same LAN lists the PC, removes
+it when the app closes, and can open the advertised endpoint. The iOS 27 beta
+simulator currently reports stale interface indexes while browsing host-published
+mDNS records, so the simulator is not a substitute for that physical-device matrix.

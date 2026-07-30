@@ -16,15 +16,24 @@ target_link_libraries(rc-vcam-probe PRIVATE
     ole32
     oleaut32
 )
-target_compile_options(rc-vcam-probe PRIVATE /W4 /permissive-)
+rc_target_strict_warnings(rc-vcam-probe)
 
 # rc-fakewriter: stands in for the capture pipeline so the Session 0 handoff can be
 # proven with nothing else built.
 add_executable(rc-fakewriter fakewriter/main.cpp)
 target_link_libraries(rc-fakewriter PRIVATE rcwin-common)
-target_compile_options(rc-fakewriter PRIVATE /W4 /permissive-)
+rc_target_strict_warnings(rc-fakewriter)
 
-foreach(target rc-vcam-probe rc-fakewriter)
+# rc-fakepc: deliberately insecure integration harness for a Debug iOS build. It is
+# never installed and refuses to send `ready` unless the bypass flag is explicit.
+add_executable(rc-fakepc fakepc/main.cpp)
+target_link_libraries(rc-fakepc PRIVATE rcwin-net)
+target_compile_definitions(rc-fakepc PRIVATE
+    $<$<CONFIG:Debug>:RC_FAKEPC_INSECURE_ENABLED=1>
+)
+rc_target_strict_warnings(rc-fakepc)
+
+foreach(target rc-vcam-probe rc-fakewriter rc-fakepc)
     set_target_properties(${target} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY         "${RC_TOOL_OUTPUT_DIR}"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${RC_TOOL_OUTPUT_DIR}"

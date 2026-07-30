@@ -88,7 +88,7 @@ void testRoundTrip() {
   const rc::FitMode modes[] = {rc::FitMode::Fit, rc::FitMode::Fill, rc::FitMode::Stretch};
   int cases = 0;
 
-  for (float angle = -180.0f; angle <= 180.0f; angle += 17.0f) {
+  for (int angle = -180; angle <= 180; angle += 17) {
     for (rc::FitMode mode : modes) {
       for (int flip = 0; flip < 4; ++flip) {
         rc::TransformParams p;
@@ -96,7 +96,7 @@ void testRoundTrip() {
         p.srcHeight = 720;
         p.dstWidth = 1920;
         p.dstHeight = 1080;
-        p.rotationDeg = angle;
+        p.rotationDeg = static_cast<float>(angle);
         p.fit = mode;
         p.flipH = (flip & 1) != 0;
         p.flipV = (flip & 2) != 0;
@@ -143,14 +143,14 @@ void testFitNeverCrops() {
 
   const int sizes[][2] = {{1920, 1080}, {1080, 1920}, {640, 640}, {1280, 720}};
 
-  for (float angle = -180.0f; angle <= 180.0f; angle += 3.0f) {
+  for (int angle = -180; angle <= 180; angle += 3) {
     for (const auto& s : sizes) {
       rc::TransformParams p;
       p.srcWidth = s[0];
       p.srcHeight = s[1];
       p.dstWidth = 1920;
       p.dstHeight = 1080;
-      p.rotationDeg = angle;
+      p.rotationDeg = static_cast<float>(angle);
       p.fit = rc::FitMode::Fit;
 
       const rc::Mat3 s2d = rc::sourceToDest(p);
@@ -168,14 +168,14 @@ void testFillNeverLeavesEmptyCorners() {
 
   const int sizes[][2] = {{1920, 1080}, {1080, 1920}, {640, 640}, {1280, 720}, {4032, 3024}};
 
-  for (float angle = -180.0f; angle <= 180.0f; angle += 1.0f) {
+  for (int angle = -180; angle <= 180; ++angle) {
     for (const auto& s : sizes) {
       rc::TransformParams p;
       p.srcWidth = s[0];
       p.srcHeight = s[1];
       p.dstWidth = 1920;
       p.dstHeight = 1080;
-      p.rotationDeg = angle;
+      p.rotationDeg = static_cast<float>(angle);
       p.fit = rc::FitMode::Fill;
 
       // Every canvas corner must sample from inside the source. If any lands
@@ -253,9 +253,9 @@ void testPanClamping() {
   // axes simultaneously.
   const float pushes[][2] = {{1, 0}, {0, 1}, {1, 1}, {1, -1}, {-1, -1}, {-1, 1}};
 
-  for (float angle = -180.0f; angle <= 180.0f; angle += 11.0f) {
+  for (int angle = -180; angle <= 180; angle += 11) {
     for (const auto& push : pushes) {
-      p.rotationDeg = angle;
+      p.rotationDeg = static_cast<float>(angle);
       p.panX = push[0] * 100000.0f;
       p.panY = push[1] * 100000.0f;
       rc::clampPanForCoverage(p);
@@ -285,6 +285,36 @@ void testPanClamping() {
   p.rotationDeg = 33.0f;
   const rc::Vec2 tight = rc::panSlack(p);
   checkNear(std::min(tight.x, tight.y), 0.0f, 1e-3f, "one axis is tight at the Fill bound");
+}
+
+void testDirectGeometryValues() {
+  std::printf("Direct bounds, Stretch scale and pan slack values\n");
+
+  rc::TransformParams p;
+  p.srcWidth = 4;
+  p.srcHeight = 3;
+  p.dstWidth = 12;
+  p.dstHeight = 8;
+  p.rotationDeg = 90.0f;
+  const rc::Vec2 bounds = rc::rotatedBounds(p);
+  checkNear(bounds.x, 3.0f, 1e-5f, "a quarter turn swaps the direct bound width");
+  checkNear(bounds.y, 4.0f, 1e-5f, "a quarter turn swaps the direct bound height");
+
+  p.rotationDeg = 0.0f;
+  p.fit = rc::FitMode::Stretch;
+  const rc::Vec2 stretch = rc::fitScale(p);
+  checkNear(stretch.x, 3.0f, 1e-5f, "Stretch uses the exact horizontal ratio");
+  checkNear(stretch.y, 8.0f / 3.0f, 1e-5f, "Stretch uses the exact vertical ratio");
+
+  p.srcWidth = 1920;
+  p.srcHeight = 1080;
+  p.dstWidth = 1280;
+  p.dstHeight = 720;
+  p.fit = rc::FitMode::Fill;
+  p.zoom = 2.0f;
+  const rc::Vec2 slack = rc::panSlack(p);
+  checkNear(slack.x, 480.0f, 1e-3f, "two-times zoom leaves 480 source pixels of x slack");
+  checkNear(slack.y, 270.0f, 1e-3f, "two-times zoom leaves 270 source pixels of y slack");
 }
 
 void testDegenerateInputs() {
@@ -333,6 +363,7 @@ int main() {
   testFillIsTight();
   testFlips();
   testPanClamping();
+  testDirectGeometryValues();
   testDegenerateInputs();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

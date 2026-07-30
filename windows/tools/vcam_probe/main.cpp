@@ -197,7 +197,8 @@ HRESULT findMfDevice(const std::wstring& name, IMFActivate** out) {
     WCHAR* friendly = nullptr;
     UINT32 length = 0;
     if (SUCCEEDED(devices[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
-                                                 &friendly, &length))) {
+                                                 &friendly, &length)) &&
+        friendly != nullptr) {
       if (*out == nullptr && name == friendly) {
         *out = devices[i];
         (*out)->AddRef();
@@ -376,6 +377,7 @@ class GrabberCallback final : public ISampleGrabberCB {
 };
 
 HRESULT findDshowFilter(const std::wstring& name, IBaseFilter** out) {
+  if (out == nullptr) return E_POINTER;
   *out = nullptr;
   ComPtr<ICreateDevEnum> devEnum;
   RC_RETURN_IF_FAILED(::CoCreateInstance(CLSID_SystemDeviceEnum, nullptr, CLSCTX_INPROC_SERVER,
@@ -386,18 +388,23 @@ HRESULT findDshowFilter(const std::wstring& name, IBaseFilter** out) {
       devEnum->CreateClassEnumerator(CLSID_VideoInputDeviceCategory, &monikers, 0);
   // S_FALSE means the category exists but is empty -- no cameras at all.
   if (hr != S_OK) return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+  if (!monikers) return E_UNEXPECTED;
 
   ComPtr<IMoniker> moniker;
+  ComPtr<IBindCtx> bindContext;
+  RC_RETURN_IF_FAILED(::CreateBindCtx(0, &bindContext));
   while (monikers->Next(1, &moniker, nullptr) == S_OK) {
+    if (!moniker) continue;
     ComPtr<IPropertyBag> bag;
-    if (SUCCEEDED(moniker->BindToStorage(nullptr, nullptr, IID_PPV_ARGS(&bag)))) {
+    if (SUCCEEDED(moniker->BindToStorage(bindContext.Get(), nullptr, IID_PPV_ARGS(&bag))) && bag) {
       VARIANT var;
       ::VariantInit(&var);
       if (SUCCEEDED(bag->Read(L"FriendlyName", &var, nullptr))) {
         const bool match = var.bstrVal && name == var.bstrVal;
         ::VariantClear(&var);
         if (match) {
-          const HRESULT bind = moniker->BindToObject(nullptr, nullptr, IID_PPV_ARGS(out));
+          const HRESULT bind =
+              moniker->BindToObject(bindContext.Get(), nullptr, IID_PPV_ARGS(out));
           if (SUCCEEDED(bind)) return S_OK;
           return bind;
         }
@@ -510,7 +517,8 @@ void listDevices() {
         WCHAR* friendly = nullptr;
         UINT32 length = 0;
         if (SUCCEEDED(devices[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
-                                                     &friendly, &length))) {
+                                                     &friendly, &length)) &&
+            friendly != nullptr) {
           std::wprintf(L"  %s\n", friendly);
           ::CoTaskMemFree(friendly);
         }
@@ -531,14 +539,18 @@ void listDevices() {
     std::wprintf(L"  (none)\n");
     return;
   }
+  if (!monikers) return;
+  ComPtr<IBindCtx> bindContext;
+  if (FAILED(::CreateBindCtx(0, &bindContext)) || !bindContext) return;
   ComPtr<IMoniker> moniker;
   while (monikers->Next(1, &moniker, nullptr) == S_OK) {
+    if (!moniker) continue;
     ComPtr<IPropertyBag> bag;
-    if (SUCCEEDED(moniker->BindToStorage(nullptr, nullptr, IID_PPV_ARGS(&bag)))) {
+    if (SUCCEEDED(moniker->BindToStorage(bindContext.Get(), nullptr, IID_PPV_ARGS(&bag))) && bag) {
       VARIANT var;
       ::VariantInit(&var);
       if (SUCCEEDED(bag->Read(L"FriendlyName", &var, nullptr))) {
-        std::wprintf(L"  %s\n", var.bstrVal);
+        if (var.bstrVal != nullptr) std::wprintf(L"  %s\n", var.bstrVal);
         ::VariantClear(&var);
       }
     }

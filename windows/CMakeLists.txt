@@ -26,9 +26,11 @@ if(CMAKE_SYSTEM_VERSION VERSION_LESS 10.0.22000)
 endif()
 
 add_subdirectory(common)      # rcwin-common     Win32 helpers, NV12, SHM ring
+add_subdirectory(net)         # rcwin-net        TCP receiver the phone connects to
+add_subdirectory(platform)    # decoder, D3D11 transform and frame pipeline
 add_subdirectory(vcam)        # rc-vcam.dll      MF media source, loaded in Session 0
 add_subdirectory(register)    # rc-vcam-register.exe
-add_subdirectory(tools)       # rc-vcam-probe, rc-fakewriter
+add_subdirectory(tools)       # rc-vcam-probe, rc-fakewriter, rc-fakepc
 
 # The M1 virtual-camera targets intentionally build without Qt, because the Windows
 # bring-up box and CI only need the SDK. Build the desktop producer when a dynamic Qt 6
@@ -45,7 +47,9 @@ if(RC_BUILD_QT_APP)
     endif()
 endif()
 
+# installer/ holds the CPack + NSIS configuration, but it is not a subdirectory: CPack
+# has to be configured from the top-level scope, so the root CMakeLists includes
+# windows/installer/RemoteCamPackaging.cmake directly when RC_BUILD_INSTALLER is ON.
+
 # Not started yet -- uncomment as each lands.
-# add_subdirectory(platform)  # D3D11 pipeline, FFmpeg decode, effects, SHM writer
 # add_subdirectory(obs-plugin)
-# add_subdirectory(installer)

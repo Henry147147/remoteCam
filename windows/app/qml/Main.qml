@@ -193,7 +193,7 @@ ApplicationWindow {
 
         Label {
             Layout.fillWidth: true
-            text: "M1 output is fixed to NV12 1920 x 1080 at 30 fps. Other formats remain disabled until consumer-to-producer geometry negotiation is implemented."
+            text: "The virtual camera requests its active NV12 geometry from the producer. Live phone video remains disabled until secure pairing is specified."
             color: "#7888a2"
             font.pixelSize: 12
             wrapMode: Text.WordWrap

@@ -1,13 +1,15 @@
 # RemoteCam — Open-Source iVCam Replacement
 
-> **Status — 2026-07-28.** `core/` transform math is implemented and verified
-> (12,101 assertions passing, under both GCC and MSVC). **M1 is written and building**
-> — the virtual camera DLL, its registration helper, a two-stack probe, the `Global\`
-> frame ring and a stand-in producer, with 111 more assertions passing — but has not
-> yet been verified against a live camera. The **iOS capture client is written and
-> building** — capture, low-latency encoding, transport, controls, telemetry,
-> background setup, and Live Activity — with 12 simulator tests passing, but it has
-> not run on hardware or against a Windows receiver. See
+> **Status — 2026-07-29.** The portable transform/protocol core, Windows frame ring,
+> bounded TCP listener, development receiver harness, ABR controller, D3D11 transform,
+> and FFmpeg D3D11VA decoder seam are implemented and pass automated tests. The Qt app
+> binds before Bonjour advertisement but deliberately stops after unauthenticated
+> `hello`; production `ready` remains blocked on the shared pairing/security contract.
+> A self-contained v0.1.0 NSIS installer has been built and archive-tested locally,
+> but neither the elevated virtual-camera/consumer matrix nor an iPhone/GPU streaming
+> path has been run. The **iOS capture client is written and building** — capture,
+> low-latency encoding, transport, controls, telemetry, background setup, and Live
+> Activity — with 12 simulator tests passing, but it has not run on hardware. See
 > [Status and handoff](#status-and-handoff) at the end of this document for who owns
 > what and where to pick up. Agent operating guide is in [CLAUDE.md](CLAUDE.md).
 >
@@ -88,7 +90,7 @@ remoteCam/
 │   ├── app/           Qt 6 / QML UI, tray, hotkeys
 │   ├── obs-plugin/    obs-remotecam source
 │   ├── tools/         rc-fakephone, rc-vcam-probe
-│   └── installer/     WiX MSI
+│   └── installer/     CPack + NSIS .exe
 ├── ios/RemoteCam/     Swift 6, SwiftUI, AVFoundation, VideoToolbox, Network.framework
 └── third_party/       nvvfx + nvar MIT headers & proxy loaders, mdns helpers
 ```
@@ -252,7 +254,7 @@ Tray icon, run-at-login, minimize-to-tray, global hotkeys (rotate 90°, freeze, 
 | **M4** | Full iOS manual camera controls + lens switching + Windows-side UI. *(iVCam paywalls exactly this.)* | 1.5 wk |
 | **M5** | Effect chain: shader effects → ONNX/DirectML segmentation → Maxine VFX → Maxine AR eye contact. | 3 wk |
 | **M6** | Record to MP4 (NVENC/MF), screenshot, OBS plugin. | 1.5 wk |
-| **M7** | iOS background capture, thermal management, diagnostics page, MSI installer, docs, CI. | 2 wk |
+| **M7** | iOS background capture, thermal management, diagnostics page, installer polish, docs, CI. | 2 wk |
 
 **≈15 weeks.** Post-v1: audio + virtual mic driver, multi-phone → multi-camera, Android client, macOS/Linux host.
 
@@ -293,7 +295,7 @@ constraint is now enforced by rule in `core/CMakeLists.txt`: nothing in that tar
 may reference D3D11, Media Foundation, Qt or WinRT.
 
 ```
-core/          portable C++20 — transform math (done), protocol, pairing. Builds anywhere.
+core/          portable C++20 — transform math and protocol codecs. Builds anywhere.
 windows/       Qt 6 client, MF virtual camera, OBS plugin, installer.   Windows agent.
 ios/           Swift 6 / SwiftUI capture app.                           Mac agent.
 docs/          protocol.md — normative wire spec.
@@ -325,17 +327,19 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Also written: `docs/protocol.md` (draft, unimplemented), `README.md`, `.gitignore`,
-and CI that builds `core/` on all three runners.
+Also written: `docs/protocol.md`, `README.md`, `.gitignore`, and CI that builds
+`core/` on all three runners. Framing, deterministic CBOR, controls, and Annex-B
+validation are implemented on both sides; pairing/authentication/media encryption
+remain draft and are not implemented.
 
 **M1 — written and building, verification outstanding.** On the Windows box:
 `windows/common/` (Win32 helpers, NV12 geometry, the test pattern, the `Global\` frame
 ring), `windows/vcam/` (`rc-vcam.dll`, the MF media source), `windows/register/`
 (`rc-vcam-register.exe`), and `windows/tools/` (`rc-vcam-probe.exe` for MF **and**
 DirectShow, `rc-fakewriter.exe` as a stand-in producer). Everything compiles clean at
-`/W4 /permissive-` and `rcwin-common-tests` passes 111 assertions, including a threaded
-seqlock contention test that races ~1600 concurrent reads against 3000 writes with zero
-torn frames.
+`/W4 /permissive- /WX` and `rcwin-common-tests` passes 186 assertions, including a
+threaded seqlock contention test, consumer replacement, producer crash recovery, and
+consumer-driven geometry renegotiation.
 
 What that does **not** yet prove: that Windows loads the DLL, that either stack pulls
 frames from it, or that the Session 0 handoff works. Those need an elevated
@@ -351,11 +355,23 @@ the simulator suite passes 12 tests with the hardware-encoder test skipped where
 encoder exists. It has not been installed/run on an iPhone or streamed to Windows.
 The integration contract and blockers are in `docs/ios-backend-handoff.md`.
 
+**Windows receive and packaging seams — implemented and test-verified.** The bounded
+TCP listener binds port 7890 before Bonjour advertisement and accepts one
+`TCP_NODELAY` phone connection. Debug `rc-fakepc --allow-insecure-session` exercises
+the protocol and control surface without weakening the production app; that path is
+compiled out of Release. The platform
+library contains the pinned LGPL FFmpeg D3D11VA decoder factory, NV12 D3D11 transform,
+PTS-preserving pipeline, and ABR policy. The Qt app, all eight Windows test binaries,
+and the v0.1.0 NSIS installer build locally; the staged app starts and the installer
+archive is valid. These are seam checks, not a hardware or end-to-end video claim.
+
 ### Not done
 
-Windows transport/decoder/pipeline/UI, production pairing/authentication/media
-encryption, the USB listener/tunnel contract, effects, OBS, recorder, and installer.
-The iOS hardware/background/thermal verification matrix also remains open.
+Production pairing/authentication/media encryption, joining decoder output to the
+frame ring in the app, the USB listener/tunnel contract, effects, OBS, and recorder.
+The installer packages and registers what exists but has not been elevated and run
+on a target machine. The iOS hardware/background/thermal verification matrix and the
+Windows decoder/GPU/consumer matrix also remain open.
 
 ### Where to pick up
 
@@ -371,10 +387,11 @@ design.
 device matrix in `ios/CLAUDE.md`, and integrate production pairing/USB after the
 joint protocol decisions in `docs/ios-backend-handoff.md` are normative.
 
-**Linux/Windows agent — M0/M3 shared work.** Implement the Windows listener,
-protocol codec, decoder, usbmux plist client, and adaptive-bitrate controller. Do not
-choose SPAKE2/HMAC/AEAD details independently; first resolve every item in the
-security-decision section of `docs/ios-backend-handoff.md`.
+**Linux/Windows agent — M0/M3 shared work.** The listener, protocol codec, decoder
+seam, and adaptive-bitrate controller are present. Next join them into the app only
+after the production security state machine is implemented, then add the usbmux plist
+client. Do not choose SPAKE2/HMAC/AEAD details independently; first resolve every
+item in the security-decision section of `docs/ios-backend-handoff.md`.
 
 ### Corrections to the original plan
 
