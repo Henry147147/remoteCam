@@ -20,6 +20,7 @@ final class AppModel: ObservableObject {
     private var currentConfiguration: StreamConfiguration?
     private var lastTelemetry: DeviceTelemetrySnapshot?
     private var streamGeneration = 0
+    private var lastFormatGeneration: UInt64 = 0
     private var hasStarted = false
 
     init() {
@@ -42,6 +43,8 @@ final class AppModel: ObservableObject {
         remoteSession.onReady = { [weak self] configuration in
             guard let self else { return }
             streamGeneration &+= 1
+            lastFormatGeneration = 0
+            remoteSession.setVideoSuspended(true)
             let generation = streamGeneration
             Task {
                 await self.startStreaming(
@@ -90,6 +93,8 @@ final class AppModel: ObservableObject {
     func disconnect() {
         RemoteCamLog.info("app", "disconnect requested")
         streamGeneration &+= 1
+        lastFormatGeneration = 0
+        remoteSession.setVideoSuspended(true)
         remoteSession.disconnect()
         encoder.invalidate()
         currentConfiguration = nil
@@ -103,6 +108,8 @@ final class AppModel: ObservableObject {
 
     private func stopCaptureAfterSessionEnded() {
         streamGeneration &+= 1
+        lastFormatGeneration = 0
+        remoteSession.setVideoSuspended(true)
         encoder.invalidate()
         currentConfiguration = nil
         UIApplication.shared.isIdleTimerDisabled = false
@@ -165,6 +172,8 @@ final class AppModel: ObservableObject {
             }
             UIApplication.shared.isIdleTimerDisabled = true
             remoteSession.markStreaming(configuration: configuration)
+            encoder.requestKeyframe()
+            remoteSession.setVideoSuspended(false)
             RemoteCamLog.info("app", "stream started generation=\(generation)")
             sendTelemetry(telemetry.snapshot, force: true)
         } catch {
@@ -195,10 +204,28 @@ final class AppModel: ObservableObject {
                 switchCamera(to: match.id)
             }
         case "set_format":
-            guard let configuration = configuration(from: message.fields) else { return }
+            guard let formatGeneration = message.fields["generation"]?.unsignedValue,
+                  formatGeneration > lastFormatGeneration else { return }
+            lastFormatGeneration = formatGeneration
+            guard let configuration = configuration(from: message.fields) else {
+                remoteSession.sendControl(.formatRejected(
+                    generation: formatGeneration,
+                    code: "invalid_format",
+                    message: "The requested stream format is invalid."
+                ))
+                encoder.requestKeyframe()
+                return
+            }
             streamGeneration &+= 1
-            let generation = streamGeneration
-            Task { await reconfigure(configuration, generation: generation) }
+            remoteSession.setVideoSuspended(true)
+            let taskGeneration = streamGeneration
+            Task {
+                await reconfigure(
+                    configuration,
+                    taskGeneration: taskGeneration,
+                    formatGeneration: formatGeneration
+                )
+            }
         case "set_control":
             let update = CameraControlUpdate(
                 zoom: message.fields["zoom"]?.numericDouble,
@@ -219,13 +246,17 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func reconfigure(_ configuration: StreamConfiguration, generation: Int) async {
+    private func reconfigure(
+        _ configuration: StreamConfiguration,
+        taskGeneration: Int,
+        formatGeneration: UInt64
+    ) async {
         let previousConfiguration = currentConfiguration
         do {
-            guard generation == streamGeneration else { return }
+            guard taskGeneration == streamGeneration else { return }
             let configuration = try configuration.validated()
             await camera.stop()
-            guard generation == streamGeneration else { return }
+            guard taskGeneration == streamGeneration else { return }
             do {
                 try encoder.configure(configuration)
                 try await camera.prepare(configuration: configuration)
@@ -233,31 +264,39 @@ final class AppModel: ObservableObject {
                 encoder.invalidate()
                 throw error
             }
-            guard generation == streamGeneration else { return }
+            guard taskGeneration == streamGeneration else { return }
             currentConfiguration = configuration
             streamError = nil
             remoteSession.sendControl(.cameraState(camera.controls))
+            remoteSession.sendControl(.formatAcknowledged(generation: formatGeneration))
             encoder.requestKeyframe()
+            remoteSession.setVideoSuspended(false)
             if let host = connectionPhase.host {
                 remoteSession.markStreaming(configuration: configuration, announceStart: false)
                 await liveActivity.update(host: host, configuration: configuration, status: "Live")
             }
         } catch {
-            guard generation == streamGeneration else { return }
+            guard taskGeneration == streamGeneration else { return }
             let requestedError = error
             encoder.invalidate()
             if let previousConfiguration {
                 do {
                     try encoder.configure(previousConfiguration)
                     try await camera.prepare(configuration: previousConfiguration)
-                    guard generation == streamGeneration else { return }
+                    guard taskGeneration == streamGeneration else { return }
                     currentConfiguration = previousConfiguration
                     remoteSession.sendControl(.cameraState(camera.controls))
+                    remoteSession.sendControl(.formatRejected(
+                        generation: formatGeneration,
+                        code: "format_unavailable",
+                        message: requestedError.localizedDescription
+                    ))
                     remoteSession.markStreaming(
                         configuration: previousConfiguration,
                         announceStart: false
                     )
                     encoder.requestKeyframe()
+                    remoteSession.setVideoSuspended(false)
                     streamError = "Format change rejected: \(requestedError.localizedDescription). Continuing with the previous format."
                     return
                 } catch {

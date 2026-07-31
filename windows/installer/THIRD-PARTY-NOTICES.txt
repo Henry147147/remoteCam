@@ -26,6 +26,31 @@ RemoteCam's own source, which is what you would need to rebuild the executable
 itself, is at https://github.com/Henry147147/remoteCam.
 
 
+FFmpeg
+------
+Copyright (C) the FFmpeg project and its contributors.
+
+The packaged libavcodec and libavutil shared libraries are the pinned vcpkg
+build configured without GPL components. They are used under the GNU Lesser
+General Public License version 2.1 or later. The exact licence text installed by
+the pinned FFmpeg package accompanies RemoteCam as FFMPEG-LGPL-2.1.txt.
+
+FFmpeg source and build instructions are available from https://ffmpeg.org/ and
+https://github.com/microsoft/vcpkg. The libraries are dynamically linked and can
+be replaced with ABI-compatible builds.
+
+
+OpenSSL 3.5.7
+-------------
+Copyright (C) the OpenSSL Project Authors.
+
+The packaged OpenSSL 3.5.7 shared libraries are used under the Apache License 2.0.
+The exact copyright and licence notice installed by the pinned vcpkg OpenSSL
+package accompanies RemoteCam as OPENSSL-LICENSE.txt. The libraries are
+dynamically linked and can be replaced with ABI-compatible OpenSSL 3 builds.
+Source is available from https://www.openssl.org/source/.
+
+
 Microsoft runtime libraries
 ---------------------------
 Copyright (C) Microsoft Corporation.

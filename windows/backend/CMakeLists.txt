@@ -4,7 +4,7 @@ add_library(rcwin-backend STATIC
 
 target_include_directories(rcwin-backend PUBLIC include)
 target_compile_features(rcwin-backend PUBLIC cxx_std_20)
-target_link_libraries(rcwin-backend PUBLIC rcwin-net)
+target_link_libraries(rcwin-backend PUBLIC rcwin-net rcwin-security)
 rc_target_strict_warnings(rcwin-backend)
 
 if(RC_BUILD_TESTS)

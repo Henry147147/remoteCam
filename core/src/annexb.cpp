@@ -35,6 +35,12 @@ uint8_t nalTypeOf(Codec codec, uint8_t headerByte) {
                               : static_cast<uint8_t>((headerByte >> 1) & 0x3Fu);
 }
 
+bool isVideoSlice(Codec codec, uint8_t nalType) {
+  // H.264 VCL types are 1..5. HEVC reserves the complete 0..31 half of the type
+  // space for VCL NAL units.
+  return codec == Codec::H264 ? (nalType >= 1 && nalType <= 5) : nalType <= 31;
+}
+
 }  // namespace
 
 bool split(const uint8_t* data, size_t size, Codec codec, std::vector<Nal>& out) {
@@ -94,8 +100,9 @@ AccessUnitReport inspect(const uint8_t* data, size_t size, Codec codec) {
   report.nalCount = static_cast<int>(nals.size());
 
   bool sps = false, pps = false, vps = false;
+  bool parameterSetsBeforeFirstKeyframe = false;
   for (const Nal& nal : nals) {
-    if (isKeyframeSlice(codec, nal.type)) report.hasKeyframeSlice = true;
+    if (isVideoSlice(codec, nal.type)) report.hasVideoSlice = true;
     if (codec == Codec::H264) {
       if (nal.type == kH264Sps) sps = true;
       if (nal.type == kH264Pps) pps = true;
@@ -104,12 +111,21 @@ AccessUnitReport inspect(const uint8_t* data, size_t size, Codec codec) {
       if (nal.type == kHevcSps) sps = true;
       if (nal.type == kHevcPps) pps = true;
     }
+    if (isKeyframeSlice(codec, nal.type)) {
+      if (!report.hasKeyframeSlice) {
+        parameterSetsBeforeFirstKeyframe =
+            codec == Codec::H264 ? (sps && pps) : (vps && sps && pps);
+      }
+      report.hasKeyframeSlice = true;
+    }
   }
 
   report.hasParameterSets = codec == Codec::H264 ? (sps && pps) : (vps && sps && pps);
+  report.isSelfContainedKeyframe =
+      report.hasKeyframeSlice && parameterSetsBeforeFirstKeyframe;
   // A non-keyframe carries no obligation: it is decodable if the decoder already has
   // the parameter sets from the keyframe it followed.
-  report.decodableFromHere = !report.hasKeyframeSlice || report.hasParameterSets;
+  report.decodableFromHere = !report.hasKeyframeSlice || report.isSelfContainedKeyframe;
   return report;
 }
 

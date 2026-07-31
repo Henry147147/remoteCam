@@ -110,6 +110,7 @@ void testKeyframeMustCarryParameterSets() {
   check(report.isAnnexB && report.nalCount == 3, "the keyframe parses");
   check(report.hasKeyframeSlice, "the IDR slice is recognised");
   check(report.hasParameterSets, "SPS and PPS are both present");
+  check(report.isSelfContainedKeyframe, "the parameter sets precede the IDR slice");
   check(report.decodableFromHere, "so a PC joining here can decode");
 
   // The bug: an IDR with no parameter sets. Decodes for whoever was already connected,
@@ -120,6 +121,19 @@ void testKeyframeMustCarryParameterSets() {
   check(report.hasKeyframeSlice, "the IDR is still recognised");
   check(!report.hasParameterSets, "the missing parameter sets are noticed");
   check(!report.decodableFromHere, "and the unit is flagged as not decodable from here");
+
+  // Merely finding the sets somewhere in the access unit is insufficient: the decoder
+  // encounters the slice first and cannot retroactively decode it once later NALs
+  // arrive.
+  std::vector<uint8_t> lateSets;
+  appendNal(lateSets, false, h264Header(5));
+  appendNal(lateSets, true, h264Header(7));
+  appendNal(lateSets, true, h264Header(8));
+  report = rc::annexb::inspect(lateSets, Codec::H264);
+  check(report.hasParameterSets, "late SPS/PPS are still reported as present");
+  check(!report.isSelfContainedKeyframe,
+        "parameter sets after the IDR do not make it self-contained");
+  check(!report.decodableFromHere, "a join at the late-set unit is rejected");
 
   // Half of them is still wrong.
   std::vector<uint8_t> spsOnly;
@@ -132,7 +146,9 @@ void testKeyframeMustCarryParameterSets() {
   std::vector<uint8_t> interFrame;
   appendNal(interFrame, false, h264Header(1));
   report = rc::annexb::inspect(interFrame, Codec::H264);
+  check(report.hasVideoSlice, "a non-IDR VCL NAL is recognised as video");
   check(!report.hasKeyframeSlice, "a non-IDR slice is not a keyframe");
+  check(!report.isSelfContainedKeyframe, "a delta frame is never a recovery point");
   check(report.decodableFromHere, "and is not required to carry parameter sets");
 
   // HEVC needs all three, so VPS omitted is a failure that H.264's rule would miss.
@@ -143,6 +159,20 @@ void testKeyframeMustCarryParameterSets() {
   appendNal(hevcGood, false, hevcHeader(19));
   check(rc::annexb::inspect(hevcGood, Codec::Hevc).decodableFromHere,
         "a complete HEVC keyframe is decodable");
+
+  std::vector<uint8_t> hevcLateSets;
+  appendNal(hevcLateSets, false, hevcHeader(19));
+  appendNal(hevcLateSets, true, hevcHeader(32));
+  appendNal(hevcLateSets, true, hevcHeader(33));
+  appendNal(hevcLateSets, true, hevcHeader(34));
+  check(!rc::annexb::inspect(hevcLateSets, Codec::Hevc).isSelfContainedKeyframe,
+        "HEVC parameter sets must also precede the random-access slice");
+
+  std::vector<uint8_t> parameterSetsOnly;
+  appendNal(parameterSetsOnly, true, h264Header(7));
+  appendNal(parameterSetsOnly, true, h264Header(8));
+  check(!rc::annexb::inspect(parameterSetsOnly, Codec::H264).hasVideoSlice,
+        "parameter sets alone are not an access unit with a picture");
 
   std::vector<uint8_t> noVps;
   appendNal(noVps, true, hevcHeader(33));

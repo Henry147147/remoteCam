@@ -2,7 +2,7 @@
 #
 # The manifest stays asInvoker rather than requireAdministrator on purpose: --status
 # must work for an ordinary user so it is usable as a diagnostic, and the tool checks
-# elevation itself for the two verbs that need it, printing the exact command to run.
+# elevation itself for mutating verbs, printing the exact command to run.
 
 add_executable(rc-vcam-register main.cpp)
 
@@ -15,6 +15,8 @@ target_link_libraries(rc-vcam-register PRIVATE
     ole32
     shell32
     advapi32
+    oleaut32
+    rstrtmgr           # non-mutating mapped-image checks before uninstall/upgrade
 )
 
 rc_target_strict_warnings(rc-vcam-register)

@@ -42,6 +42,24 @@ final class ControlMessageTests: XCTestCase {
         }
     }
 
+    func testFormatGenerationResponsesRoundTrip() throws {
+        let acknowledged = try ControlMessage(
+            payload: ControlMessage.formatAcknowledged(generation: 42).encoded()
+        )
+        XCTAssertEqual(acknowledged.type, "format_ack")
+        XCTAssertEqual(acknowledged.fields["generation"], .unsigned(42))
+
+        let rejected = try ControlMessage(payload: ControlMessage.formatRejected(
+            generation: 43,
+            code: "format_unavailable",
+            message: "Unsupported capture format"
+        ).encoded())
+        XCTAssertEqual(rejected.type, "format_reject")
+        XCTAssertEqual(rejected.fields["generation"], .unsigned(43))
+        XCTAssertEqual(rejected.fields["code"], .string("format_unavailable"))
+        XCTAssertEqual(rejected.fields["message"], .string("Unsupported capture format"))
+    }
+
     func testRejectsHostileStreamConfigurationsBeforeFrameworkConversions() {
         let cases = [
             StreamConfiguration(codec: .h264, width: Int.max, height: 1_080, framesPerSecond: 30, bitrate: 4_000_000),

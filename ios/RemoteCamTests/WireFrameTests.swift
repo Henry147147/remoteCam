@@ -39,4 +39,33 @@ final class WireFrameTests: XCTestCase {
             XCTAssertEqual(error as? WireFrameError, .payloadTooLarge)
         }
     }
+
+    func testRejectsFragmentationFlagInV1() {
+        XCTAssertThrowsError(try WireFrame(
+            channel: .control,
+            flags: .endOfFragment,
+            presentationTimeMicros: 0,
+            payload: Data()
+        ).encoded()) { error in
+            XCTAssertEqual(error as? WireFrameError, .fragmentationUnsupported)
+        }
+
+        var decoder = WireFrameDecoder()
+        let header = Data([0, 0, 0, 0, 0, WireFlags.endOfFragment.rawValue,
+                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        XCTAssertThrowsError(try decoder.append(header)) { error in
+            XCTAssertEqual(error as? WireFrameError, .fragmentationUnsupported)
+        }
+    }
+
+    func testRejectsKeyframeFlagOutsideVideoChannel() {
+        XCTAssertThrowsError(try WireFrame(
+            channel: .control,
+            flags: .keyframe,
+            presentationTimeMicros: 0,
+            payload: Data()
+        ).encoded()) { error in
+            XCTAssertEqual(error as? WireFrameError, .invalidChannelFlags)
+        }
+    }
 }

@@ -110,8 +110,8 @@ void testEnvelopeRejections() {
 void testForwardCompatibility() {
   std::printf("Forward compatibility\n");
 
-  // A newer phone sends fields this build has never heard of. They must survive rather
-  // than cause a rejection -- this is the rule that keeps old PCs working.
+  // Decode preserves fields for diagnostics. A known v1 parser subsequently rejects
+  // extras; only an unknown authenticated message type is additive.
   Message future;
   future.type = "camera_state";
   future.fields.insert_or_assign("zoom", Value::real(2.0));
@@ -183,6 +183,10 @@ void testPcToPhoneMessages() {
 
   Message formatBack = roundTrip(rc::control::setFormat(config), ok);
   check(ok && formatBack.type == "set_format", "set_format round-trips");
+  Message generatedFormat = roundTrip(rc::control::setFormat(config, 7), ok);
+  uint64_t generation = 0;
+  check(ok && generatedFormat.unsignedInt("generation", generation) && generation == 7,
+        "live set_format carries its acknowledgement generation");
 
   // Absent position means "any camera in that lens class"; sending an empty string
   // would match nothing.
@@ -266,6 +270,18 @@ void testPhoneToPcParsing() {
   Message noId = helloBack;
   noId.fields.erase("device_id");
   check(!rc::control::parseHello(noId, parsed), "hello without a device id is refused");
+  Message nonCanonicalId = helloBack;
+  nonCanonicalId.fields.insert_or_assign("device_id", Value::text("0123456789ABCDEf"));
+  check(!rc::control::parseHello(nonCanonicalId, parsed),
+        "hello requires a canonical lowercase 16-hex device id");
+  Message missingModel = helloBack;
+  missingModel.fields.erase("model");
+  check(!rc::control::parseHello(missingModel, parsed),
+        "hello requires the complete v1 identity shape");
+  Message extraHello = helloBack;
+  extraHello.fields.insert_or_assign("future", Value::boolean(true));
+  check(!rc::control::parseHello(extraHello, parsed),
+        "a known v1 message rejects unexpected fields");
 
   Message orientation;
   orientation.type = "orientation";
@@ -345,6 +361,54 @@ void testPhoneToPcBuilders() {
 
   check(roundTrip(rc::control::streamStart(), ok).type == "stream_start",
         "stream_start builder has the expected type");
+
+  rc::control::AuthResponse auth;
+  auth.clientNonce.fill(0x11);
+  auth.clientProof.fill(0x22);
+  rc::control::AuthResponse authOut;
+  check(rc::control::parseAuthResponse(
+            roundTrip(rc::control::authResponse(auth), ok), authOut) &&
+            authOut.clientNonce == auth.clientNonce &&
+            authOut.clientProof == auth.clientProof,
+        "auth_response requires exact 32-byte nonce and proof fields");
+  Message extraAuth = rc::control::authResponse(auth);
+  extraAuth.fields.insert_or_assign("extra", Value::unsignedInt(1));
+  check(!rc::control::parseAuthResponse(extraAuth, authOut),
+        "auth_response rejects unexpected authenticated fields");
+
+  rc::control::AuthChallenge challenge;
+  challenge.serverNonce.fill(0x33);
+  challenge.expiresUnixSeconds = 100;
+  check(roundTrip(rc::control::authChallenge(challenge), ok).type == "auth_challenge",
+        "auth_challenge builder has the expected type");
+  rc::control::AuthConfirm confirm;
+  confirm.serverProof.fill(0x44);
+  confirm.sessionExpiresUnixSeconds = 200;
+  check(roundTrip(rc::control::authConfirm(confirm), ok).type == "auth_confirm",
+        "auth_confirm builder has the expected type");
+
+  uint64_t generation = 0;
+  check(rc::control::parseFormatAck(roundTrip(rc::control::formatAck(9), ok), generation) &&
+            generation == 9,
+        "format_ack carries the applied generation");
+  check(!rc::control::parseFormatAck(rc::control::formatAck(0), generation),
+        "generation zero is reserved for the initial stream");
+
+  rc::control::FormatReject rejected{9, "encoder_rebuild_failed", "unsupported format"};
+  rc::control::FormatReject rejectedOut;
+  check(rc::control::parseFormatReject(
+            roundTrip(rc::control::formatReject(rejected), ok), rejectedOut) &&
+            rejectedOut.generation == 9 &&
+            rejectedOut.code == "encoder_rebuild_failed" &&
+            rejectedOut.message == "unsupported format",
+        "format_reject identifies the failed generation and reason");
+  rejected.generation = 0;
+  check(!rc::control::parseFormatReject(rc::control::formatReject(rejected), rejectedOut),
+        "format_reject rejects the reserved generation");
+  rejected.generation = 9;
+  rejected.code.clear();
+  check(!rc::control::parseFormatReject(rc::control::formatReject(rejected), rejectedOut),
+        "format_reject requires a non-empty code");
 
   rc::control::Orientation orientation{37.0, false};
   rc::control::Orientation orientationOut;
@@ -430,17 +494,29 @@ void testCapsParsing() {
 
   Message caps;
   caps.type = "caps";
-  caps.fields.insert_or_assign("cameras", Value::array({camera, anonymous}));
+  caps.fields.insert_or_assign("cameras", Value::array({camera}));
   caps.fields.insert_or_assign("codecs", Value::array({Value::text("hevc"), Value::text("h264")}));
 
   bool ok = false;
   rc::control::Caps parsed;
-  check(rc::control::parseCaps(roundTrip(caps, ok), parsed), "caps parses");
-  check(parsed.cameras.size() == 1, "a camera without an id is discarded");
+  check(!rc::control::parseCaps(roundTrip(caps, ok), parsed),
+        "caps rejects an out-of-contract format instead of filtering it");
+  camera = Value::map([&] {
+    rc::cbor::Map m;
+    m.insert_or_assign("id", Value::text("camera-1"));
+    m.insert_or_assign("name", Value::text("Back Wide"));
+    m.insert_or_assign("position", Value::text("back"));
+    m.insert_or_assign("lens", Value::text("wide"));
+    m.insert_or_assign("formats", Value::array({format1}));
+    return m;
+  }());
+  caps.fields.insert_or_assign("cameras", Value::array({camera}));
+  check(rc::control::parseCaps(roundTrip(caps, ok), parsed), "strict caps parses");
+  check(parsed.cameras.size() == 1, "valid camera is retained");
   if (!parsed.cameras.empty()) {
     check(parsed.cameras[0].id == "camera-1" && parsed.cameras[0].lens == "wide",
           "camera descriptor fields");
-    check(parsed.cameras[0].formats.size() == 1, "an unusable format is discarded");
+    check(parsed.cameras[0].formats.size() == 1, "valid format is retained");
     if (!parsed.cameras[0].formats.empty()) {
       check(parsed.cameras[0].formats[0].width == 1920 &&
                 parsed.cameras[0].formats[0].fps == 60,
@@ -451,6 +527,11 @@ void testCapsParsing() {
   rc::control::Codec codec = rc::control::Codec::H264;
   check(parsed.preferredCodec(codec) && codec == rc::control::Codec::Hevc,
         "hevc is preferred when offered");
+
+  Message anonymousCaps = caps;
+  anonymousCaps.fields.insert_or_assign("cameras", Value::array({anonymous}));
+  check(!rc::control::parseCaps(anonymousCaps, parsed),
+        "caps rejects a camera missing its exact v1 fields");
 
   rc::control::Caps h264Only;
   h264Only.codecs = {"h264"};

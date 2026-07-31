@@ -41,6 +41,8 @@ namespace rcnet {
 
 // The port both sides reserved (docs/ios-backend-handoff.md "Integration checkpoint").
 inline constexpr uint16_t kDefaultPort = 7890;
+// A non-reading peer cannot hold a sender (and therefore listener shutdown) forever.
+inline constexpr DWORD kConnectionSendTimeoutMillis = 2000;
 
 // Winsock refcount. Every socket-owning object holds one; the last one out calls
 // WSACleanup. A process-wide init-once would be simpler and would break any host that
@@ -83,9 +85,12 @@ class Connection {
   // One framed message is one indivisible byte stream operation. The listener's
   // session controller, ABR timer and UI can all send concurrently; without this lock
   // their headers and payloads can interleave even though each individual send() is
-  // legal. The same lock also makes close-vs-send a defined operation.
+  // legal. Socket state has a separate lock so close() can call shutdown() and unblock
+  // a sender instead of waiting behind the blocked operation.
+  std::mutex sendMutex_;
   mutable std::mutex socketMutex_;
   SOCKET socket_ = INVALID_SOCKET;
+  bool closing_ = false;
   std::string peer_;
 };
 

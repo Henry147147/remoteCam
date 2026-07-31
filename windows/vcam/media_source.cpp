@@ -2,8 +2,10 @@
 
 #include <mferror.h>
 
+#include <array>
 #include <new>
 
+#include "media_format.h"
 #include "rcwin/hr.h"
 
 using Microsoft::WRL::ComPtr;
@@ -11,28 +13,27 @@ using Microsoft::WRL::ComPtr;
 namespace rcvcam {
 namespace {
 
-// Builds the single NV12 media type this source advertises.
-//
-// Every attribute below has been the cause of a real symptom somewhere:
-// MF_MT_INTERLACE_MODE missing makes some consumers reject the type outright,
-// MF_MT_ALL_SAMPLES_INDEPENDENT missing makes seeking logic in recorders misbehave,
-// and MF_MT_DEFAULT_STRIDE missing leaves a consumer to guess the stride, which it
-// does by assuming packed -- fine here, wrong the moment the ladder gains a width that
-// is not a multiple of 64.
-HRESULT CreateVideoType(IMFMediaType** out) {
+HRESULT selectedVideoType(IMFPresentationDescriptor* presentation,
+                          VideoFormat& format, IMFMediaType** out) {
+  RC_RETURN_IF_NULL(presentation);
+  RC_RETURN_IF_NULL(out);
+  *out = nullptr;
+
+  DWORD streamCount = 0;
+  RC_RETURN_IF_FAILED(presentation->GetStreamDescriptorCount(&streamCount));
+  RC_RETURN_HR_IF(streamCount != 1, MF_E_INVALIDSTREAMNUMBER);
+
+  BOOL selected = FALSE;
+  ComPtr<IMFStreamDescriptor> descriptor;
+  RC_RETURN_IF_FAILED(
+      presentation->GetStreamDescriptorByIndex(0, &selected, &descriptor));
+  RC_RETURN_HR_IF(!selected, MF_E_MEDIA_SOURCE_NO_STREAMS_SELECTED);
+
+  ComPtr<IMFMediaTypeHandler> handler;
+  RC_RETURN_IF_FAILED(descriptor->GetMediaTypeHandler(&handler));
   ComPtr<IMFMediaType> type;
-  RC_RETURN_IF_FAILED(::MFCreateMediaType(&type));
-  RC_RETURN_IF_FAILED(type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video));
-  RC_RETURN_IF_FAILED(type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12));
-  RC_RETURN_IF_FAILED(
-      type->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive));
-  RC_RETURN_IF_FAILED(type->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE));
-  RC_RETURN_IF_FAILED(::MFSetAttributeSize(type.Get(), MF_MT_FRAME_SIZE, kWidth, kHeight));
-  RC_RETURN_IF_FAILED(
-      ::MFSetAttributeRatio(type.Get(), MF_MT_FRAME_RATE, kFpsNumerator, kFpsDenominator));
-  RC_RETURN_IF_FAILED(::MFSetAttributeRatio(type.Get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1));
-  RC_RETURN_IF_FAILED(type->SetUINT32(MF_MT_DEFAULT_STRIDE, kWidth));
-  RC_RETURN_IF_FAILED(type->SetUINT32(MF_MT_SAMPLE_SIZE, kWidth * kHeight * 3 / 2));
+  RC_RETURN_IF_FAILED(handler->GetCurrentMediaType(&type));
+  RC_RETURN_IF_FAILED(videoFormatFromMediaType(type.Get(), format));
   return type.CopyTo(out);
 }
 
@@ -65,16 +66,23 @@ HRESULT MediaSource::Initialize() {
   RC_RETURN_IF_FAILED(::MFCreateEventQueue(&eventQueue_));
   RC_RETURN_IF_FAILED(::MFCreateAttributes(&attributes_, 4));
 
-  ComPtr<IMFMediaType> type;
-  RC_RETURN_IF_FAILED(CreateVideoType(&type));
+  std::array<ComPtr<IMFMediaType>, kVideoFormats.size()> types;
+  std::array<IMFMediaType*, kVideoFormats.size()> rawTypes{};
+  IMFMediaType* defaultType = nullptr;
+  for (size_t index = 0; index < kVideoFormats.size(); ++index) {
+    RC_RETURN_IF_FAILED(createVideoMediaType(kVideoFormats[index], &types[index]));
+    rawTypes[index] = types[index].Get();
+    if (kVideoFormats[index] == kDefaultVideoFormat) defaultType = rawTypes[index];
+  }
+  RC_RETURN_HR_IF(defaultType == nullptr, E_UNEXPECTED);
 
-  IMFMediaType* types[] = {type.Get()};
   ComPtr<IMFStreamDescriptor> descriptor;
-  RC_RETURN_IF_FAILED(::MFCreateStreamDescriptor(0, ARRAYSIZE(types), types, &descriptor));
+  RC_RETURN_IF_FAILED(::MFCreateStreamDescriptor(
+      0, static_cast<DWORD>(rawTypes.size()), rawTypes.data(), &descriptor));
 
   ComPtr<IMFMediaTypeHandler> handler;
   RC_RETURN_IF_FAILED(descriptor->GetMediaTypeHandler(&handler));
-  RC_RETURN_IF_FAILED(handler->SetCurrentMediaType(type.Get()));
+  RC_RETURN_IF_FAILED(handler->SetCurrentMediaType(defaultType));
 
   // These four attributes are what make the Frame Server treat this object as a camera
   // rather than as an anonymous media source. A source missing them enumerates in the
@@ -104,8 +112,9 @@ HRESULT MediaSource::Initialize() {
       ::MFCreatePresentationDescriptor(ARRAYSIZE(descriptors), descriptors, &descriptor_));
   RC_RETURN_IF_FAILED(descriptor_->SelectStream(0));
 
-  RC_LOG(L"media source initialised (%ux%u NV12 @ %u/%u)", kWidth, kHeight, kFpsNumerator,
-         kFpsDenominator);
+  RC_LOG(L"media source initialised (%zu NV12 types; default %ux%u @ %u/%u)",
+         kVideoFormats.size(), kDefaultVideoFormat.width, kDefaultVideoFormat.height,
+         kDefaultVideoFormat.fpsNumerator, kDefaultVideoFormat.fpsDenominator);
   return S_OK;
 }
 
@@ -218,6 +227,10 @@ IFACEMETHODIMP MediaSource::Start(IMFPresentationDescriptor* pd, const GUID* tim
   RC_RETURN_HR_IF(timeFormat != nullptr && *timeFormat != GUID_NULL,
                   MF_E_UNSUPPORTED_TIME_FORMAT);
 
+  VideoFormat selectedFormat;
+  ComPtr<IMFMediaType> selectedType;
+  RC_RETURN_IF_FAILED(selectedVideoType(pd, selectedFormat, &selectedType));
+
   ComPtr<IMFMediaEventQueue> queue;
   ComPtr<MediaStream> stream;
   bool wasStarted = false;
@@ -234,12 +247,16 @@ IFACEMETHODIMP MediaSource::Start(IMFPresentationDescriptor* pd, const GUID* tim
   ::PropVariantInit(&empty);
   const PROPVARIANT* position = startPosition ? startPosition : &empty;
 
+  HRESULT hr = stream->Configure(selectedFormat, selectedType.Get());
+
   // Order is load-bearing. A consumer waits for MENewStream to learn the stream exists
   // and only then subscribes to it; queueing MESourceStarted first races it into
   // missing the stream entirely.
-  HRESULT hr = queue->QueueEventParamUnk(wasStarted ? MEUpdatedStream : MENewStream,
-                                         GUID_NULL, S_OK,
-                                         static_cast<IMFMediaStream2*>(stream.Get()));
+  if (SUCCEEDED(hr)) {
+    hr = queue->QueueEventParamUnk(wasStarted ? MEUpdatedStream : MENewStream,
+                                   GUID_NULL, S_OK,
+                                   static_cast<IMFMediaStream2*>(stream.Get()));
+  }
   if (SUCCEEDED(hr)) {
     hr = stream->QueueEvent(wasStarted ? MEStreamSeeked : MEStreamStarted, GUID_NULL, S_OK,
                             position);

@@ -1,0 +1,6 @@
+RemoteCam Windows artifact signing status: @RC_WINDOWS_SIGNING_STATUS@
+
+@RC_WINDOWS_SIGNING_DETAIL@
+
+This status applies to RemoteCam.exe, rc-vcam.dll, rc-vcam-register.exe, and the
+NSIS installer in this release.

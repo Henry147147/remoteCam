@@ -166,6 +166,7 @@ final class RemoteCamSession: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var intentionalDisconnect = false
     private var controlChannelAuthenticated = false
+    private var videoSuspended = true
     private let deviceID = DeviceIdentity.loadOrCreate()
 #if DEBUG
     private let allowsInsecureDevelopmentSession = ProcessInfo.processInfo.arguments.contains("--allow-insecure-session")
@@ -181,6 +182,7 @@ final class RemoteCamSession: ObservableObject {
         self.endpoint = endpoint
         reconnectAttempt = 0
         controlChannelAuthenticated = false
+        videoSuspended = true
         updatePhase(.connecting(host))
         transport.connect(endpoint: endpoint)
     }
@@ -189,6 +191,7 @@ final class RemoteCamSession: ObservableObject {
         RemoteCamLog.info("session", "intentional disconnect")
         intentionalDisconnect = true
         reconnectTask?.cancel()
+        videoSuspended = true
         transport.cancel()
         updatePhase(.idle)
     }
@@ -205,6 +208,7 @@ final class RemoteCamSession: ObservableObject {
     }
 
     func sendVideo(_ unit: EncodedAccessUnit) {
+        guard !videoSuspended else { return }
         if unit.isKeyframe {
             RemoteCamLog.debug("protocol", "send keyframe bytes=\(unit.data.count), pts_us=\(unit.presentationTimeMicros)")
         }
@@ -220,6 +224,10 @@ final class RemoteCamSession: ObservableObject {
         guard let host else { return }
         if announceStart { sendControl(.streamStart()) }
         updatePhase(.streaming(host, configuration))
+    }
+
+    func setVideoSuspended(_ suspended: Bool) {
+        videoSuspended = suspended
     }
 
     private func handle(_ event: TransportEvent) {
@@ -300,6 +308,7 @@ final class RemoteCamSession: ObservableObject {
             updatePhase(.failed(lastError))
             return
         }
+        videoSuspended = true
         reconnectTask?.cancel()
         reconnectAttempt += 1
         let attempt = reconnectAttempt

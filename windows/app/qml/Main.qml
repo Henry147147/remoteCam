@@ -1,3 +1,5 @@
+// Context properties are injected by both the production and E2E hosts.
+// qmllint disable unqualified
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -7,7 +9,7 @@ ApplicationWindow {
     objectName: "remoteCam.mainWindow"
     Accessible.name: appE2EMode ? "RemoteCam E2E main window" : "RemoteCam main window"
     width: 620
-    height: 840
+    height: 1080
     minimumWidth: 520
     minimumHeight: 420
     visible: true
@@ -23,11 +25,20 @@ ApplicationWindow {
         }
     }
 
-    ColumnLayout {
+    ScrollView {
+        id: pageScroll
         anchors.fill: parent
-        anchors.margins: 28
-        anchors.bottomMargin: 44
-        spacing: 20
+        clip: true
+        topPadding: 28
+        bottomPadding: 44
+        leftPadding: 28
+        rightPadding: 28
+        contentWidth: availableWidth
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+        ColumnLayout {
+            width: pageScroll.availableWidth
+            spacing: 20
 
         ColumnLayout {
             spacing: 4
@@ -66,8 +77,8 @@ ApplicationWindow {
                 Rectangle {
                     Layout.alignment: Qt.AlignTop
                     Layout.topMargin: 5
-                    width: 12
-                    height: 12
+                    Layout.preferredWidth: 12
+                    Layout.preferredHeight: 12
                     radius: 6
                     color: root.statusColor()
                 }
@@ -97,6 +108,37 @@ ApplicationWindow {
         }
 
         Rectangle {
+            objectName: "remoteCam.livePreview"
+            Accessible.name: "Live processed camera preview"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 260
+            radius: 14
+            color: "#050912"
+            border.color: "#24334c"
+            clip: true
+            visible: !appE2EMode
+
+            Image {
+                anchors.fill: parent
+                anchors.margins: 1
+                source: frameProducer.previewSource
+                cache: false
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+            }
+
+            Label {
+                anchors.centerIn: parent
+                visible: !frameProducer.publishing
+                text: "Processed preview appears after a paired iPhone starts streaming"
+                color: "#7888a2"
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                width: Math.min(parent.width - 40, 420)
+            }
+        }
+
+        Rectangle {
             objectName: "remoteCam.phoneStatusCard"
             Accessible.name: "Phone receiver status"
             Layout.fillWidth: true
@@ -112,8 +154,8 @@ ApplicationWindow {
                 spacing: 14
 
                 Rectangle {
-                    width: 12
-                    height: 12
+                    Layout.preferredWidth: 12
+                    Layout.preferredHeight: 12
                     radius: 6
                     color: sessionStatus.streaming ? "#35d07f" : "#f6c453"
                 }
@@ -181,8 +223,8 @@ ApplicationWindow {
                 Rectangle {
                     Layout.alignment: Qt.AlignTop
                     Layout.topMargin: 5
-                    width: 10
-                    height: 10
+                    Layout.preferredWidth: 10
+                    Layout.preferredHeight: 10
                     radius: 5
                     color: lanDiscovery.state === 1 || lanDiscovery.state === 4 ? "#35d07f"
                                                    : lanDiscovery.state === 2 ? "#ef6b73" : "#f6c453"
@@ -219,6 +261,169 @@ ApplicationWindow {
                         color: "#91a0b8"
                         font.pixelSize: 12
                     }
+                }
+            }
+        }
+
+        GroupBox {
+            id: phoneControlsGroup
+            objectName: "remoteCam.phoneControlsGroup"
+            Accessible.name: title
+            title: "iPhone camera"
+            Layout.fillWidth: true
+            enabled: phoneController.controlsEnabled
+            implicitHeight: phoneControlsGrid.implicitHeight + 46
+
+            background: Rectangle {
+                color: "#121d2f"
+                radius: 14
+                border.color: "#24334c"
+            }
+
+            label: Label {
+                x: 14
+                text: phoneControlsGroup.title
+                color: "#d9e2ef"
+                font.bold: true
+            }
+
+            GridLayout {
+                id: phoneControlsGrid
+                anchors.fill: parent
+                anchors.margins: 12
+                columns: 3
+                columnSpacing: 14
+                rowSpacing: 8
+
+                Label { text: "Camera"; color: "#91a0b8" }
+                ComboBox {
+                    objectName: "remoteCam.phoneCamera"
+                    Accessible.name: "iPhone camera"
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                    model: phoneController.cameraNames
+                    currentIndex: phoneController.cameraIndex
+                    onActivated: phoneController.cameraIndex = currentIndex
+                }
+
+                Label { text: "Stream"; color: "#91a0b8" }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                    ComboBox {
+                        objectName: "remoteCam.codec"
+                        Accessible.name: "Video codec"
+                        model: ["h264", "hevc"]
+                        currentIndex: phoneController.codec === "hevc" ? 1 : 0
+                        onActivated: phoneController.codec = currentText
+                    }
+                    ComboBox {
+                        objectName: "remoteCam.streamResolution"
+                        Accessible.name: "Capture resolution"
+                        model: ["640x480", "960x540", "1280x720", "1920x1080",
+                                "2560x1440", "3840x2160"]
+                        currentIndex: Math.max(0, model.indexOf(phoneController.resolution))
+                        onActivated: phoneController.resolution = currentText
+                    }
+                    ComboBox {
+                        objectName: "remoteCam.streamFrameRate"
+                        Accessible.name: "Capture frame rate"
+                        model: [30, 60]
+                        currentIndex: phoneController.frameRate === 60 ? 1 : 0
+                        onActivated: phoneController.frameRate = currentValue
+                    }
+                    Button {
+                        objectName: "remoteCam.applyFormat"
+                        Accessible.name: "Apply capture format"
+                        text: "Apply"
+                        onClicked: phoneController.applyFormat()
+                    }
+                }
+
+                Label { text: "Zoom"; color: "#91a0b8" }
+                Slider {
+                    objectName: "remoteCam.phoneZoom"
+                    Accessible.name: "iPhone camera zoom"
+                    Layout.fillWidth: true
+                    from: 1
+                    to: 10
+                    value: phoneController.phoneZoom
+                    onMoved: phoneController.phoneZoom = value
+                }
+                Label { text: Number(phoneController.phoneZoom).toFixed(1) + "x"; color: "white" }
+
+                Label { text: "Focus"; color: "#91a0b8" }
+                Slider {
+                    objectName: "remoteCam.focus"
+                    Accessible.name: "Manual focus"
+                    Layout.fillWidth: true
+                    from: 0
+                    to: 1
+                    value: phoneController.focus
+                    onMoved: phoneController.focus = value
+                }
+                Label { text: Number(phoneController.focus).toFixed(2); color: "white" }
+
+                Label { text: "Exposure"; color: "#91a0b8" }
+                Slider {
+                    objectName: "remoteCam.exposureBias"
+                    Accessible.name: "Exposure bias"
+                    Layout.fillWidth: true
+                    from: -4
+                    to: 4
+                    stepSize: 0.1
+                    value: phoneController.exposureBias
+                    onMoved: phoneController.exposureBias = value
+                }
+                Label { text: Number(phoneController.exposureBias).toFixed(1) + " EV"; color: "white" }
+
+                Label { text: "White balance"; color: "#91a0b8" }
+                Slider {
+                    objectName: "remoteCam.whiteBalance"
+                    Accessible.name: "White balance temperature"
+                    Layout.fillWidth: true
+                    from: 2500
+                    to: 9000
+                    stepSize: 50
+                    value: phoneController.whiteBalance
+                    onMoved: phoneController.whiteBalance = value
+                }
+                Label { text: Math.round(phoneController.whiteBalance) + " K"; color: "white" }
+
+                Label { text: "Options"; color: "#91a0b8" }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                    CheckBox {
+                        objectName: "remoteCam.torch"
+                        Accessible.name: "Phone torch"
+                        text: "Torch"
+                        checked: phoneController.torch
+                        onToggled: phoneController.torch = checked
+                    }
+                    CheckBox {
+                        objectName: "remoteCam.stabilization"
+                        Accessible.name: "Phone stabilization"
+                        text: "Stabilization"
+                        checked: phoneController.stabilization
+                        onToggled: phoneController.stabilization = checked
+                    }
+                    CheckBox {
+                        objectName: "remoteCam.phonePreview"
+                        Accessible.name: "Keep phone preview on"
+                        text: "Phone preview"
+                        checked: phoneController.previewEnabled
+                        onToggled: phoneController.previewEnabled = checked
+                    }
+                }
+
+                Label { text: "Status"; color: "#91a0b8" }
+                Label {
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                    text: phoneController.commandStatus
+                    color: "#b5c0d1"
+                    wrapMode: Text.WordWrap
                 }
             }
         }
@@ -278,7 +483,171 @@ ApplicationWindow {
                     model: [frameProducer.outputFrameRate]
                     enabled: false
                 }
+
+                Label { text: "Screenshot"; color: "#91a0b8"; visible: !appE2EMode }
+                RowLayout {
+                    visible: !appE2EMode
+                    Layout.fillWidth: true
+                    Button {
+                        objectName: "remoteCam.takeScreenshot"
+                        Accessible.name: "Save screenshot"
+                        text: "Save PNG"
+                        onClicked: frameProducer.takeScreenshot()
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: frameProducer.screenshotStatus
+                        color: "#b5c0d1"
+                        elide: Text.ElideMiddle
+                    }
+                }
+
+                Label { text: "Recording"; color: "#91a0b8"; visible: !appE2EMode }
+                RowLayout {
+                    visible: !appE2EMode
+                    Layout.fillWidth: true
+                    Button {
+                        objectName: "remoteCam.recording"
+                        Accessible.name: frameProducer.recording ? "Stop and save recording"
+                                                                  : "Start MP4 recording"
+                        Accessible.description: frameProducer.recordingStatus
+                        text: frameProducer.recording
+                              ? "Stop & Save"
+                              : (frameProducer.recordingCanToggle ? "Record MP4" : "Finalizing...")
+                        enabled: frameProducer.recordingCanToggle
+                        highlighted: frameProducer.recording
+                        onClicked: frameProducer.toggleRecording()
+                    }
+                    Label {
+                        objectName: "remoteCam.recordingStatus"
+                        Accessible.name: text
+                        Layout.fillWidth: true
+                        text: frameProducer.recordingStatus
+                              + (frameProducer.recording ? " - " + frameProducer.recordingDuration : "")
+                              + (frameProducer.recordingDroppedFrames > 0
+                                 ? " - " + frameProducer.recordingDroppedFrames + " dropped" : "")
+                        color: frameProducer.recording ? "#7de2b8" : "#b5c0d1"
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Label {
+                    text: "Saved file"
+                    color: "#91a0b8"
+                    visible: !appE2EMode && frameProducer.recordingPath.length > 0
+                }
+                Label {
+                    objectName: "remoteCam.recordingPath"
+                    Accessible.name: text.length > 0 ? "Recording file " + text : ""
+                    Layout.fillWidth: true
+                    visible: !appE2EMode && frameProducer.recordingPath.length > 0
+                    text: frameProducer.recordingPath
+                    color: "#b5c0d1"
+                    elide: Text.ElideMiddle
+                }
             }
+        }
+
+        GroupBox {
+            id: transformGroup
+            objectName: "remoteCam.transformGroup"
+            Accessible.name: title
+            title: "Transform"
+            visible: !appE2EMode
+            Layout.fillWidth: true
+            implicitHeight: transformGrid.implicitHeight + 46
+
+            background: Rectangle {
+                color: "#121d2f"
+                radius: 14
+                border.color: "#24334c"
+            }
+
+            label: Label {
+                x: 14
+                text: transformGroup.title
+                color: "#d9e2ef"
+                font.bold: true
+            }
+
+            GridLayout {
+                id: transformGrid
+                anchors.fill: parent
+                anchors.margins: 12
+                columns: 3
+                columnSpacing: 14
+                rowSpacing: 8
+
+                Label { text: "Rotation"; color: "#91a0b8" }
+                Slider {
+                    objectName: "remoteCam.rotation"
+                    Accessible.name: "Clockwise rotation"
+                    Layout.fillWidth: true
+                    from: -180
+                    to: 180
+                    stepSize: 1
+                    value: frameProducer.rotationDeg
+                    onMoved: frameProducer.rotationDeg = value
+                }
+                Label { text: Math.round(frameProducer.rotationDeg) + "°"; color: "white" }
+
+                Label { text: "Framing"; color: "#91a0b8" }
+                ComboBox {
+                    objectName: "remoteCam.fitMode"
+                    Accessible.name: "Framing mode"
+                    Layout.fillWidth: true
+                    model: ["Fit", "Fill", "Stretch"]
+                    currentIndex: frameProducer.fitMode
+                    onActivated: frameProducer.fitMode = currentIndex
+                }
+                Button {
+                    objectName: "remoteCam.resetTransform"
+                    Accessible.name: "Reset transform"
+                    text: "Reset"
+                    onClicked: frameProducer.resetTransform()
+                }
+
+                Label { text: "Zoom"; color: "#91a0b8" }
+                Slider {
+                    objectName: "remoteCam.zoom"
+                    Accessible.name: "Transform zoom"
+                    Layout.fillWidth: true
+                    from: 1
+                    to: 4
+                    stepSize: 0.01
+                    value: frameProducer.zoom
+                    onMoved: frameProducer.zoom = value
+                }
+                Label { text: Number(frameProducer.zoom).toFixed(2) + "×"; color: "white" }
+
+                Label { text: "Mirror"; color: "#91a0b8" }
+                RowLayout {
+                    CheckBox {
+                        objectName: "remoteCam.flipHorizontal"
+                        Accessible.name: "Flip horizontally"
+                        text: "Horizontal"
+                        checked: frameProducer.flipH
+                        onToggled: frameProducer.flipH = checked
+                    }
+                    CheckBox {
+                        objectName: "remoteCam.flipVertical"
+                        Accessible.name: "Flip vertically"
+                        text: "Vertical"
+                        checked: frameProducer.flipV
+                        onToggled: frameProducer.flipV = checked
+                    }
+                }
+                Item { Layout.fillWidth: true }
+            }
+        }
+
+        CheckBox {
+            objectName: "remoteCam.minimizeToTray"
+            Accessible.name: "Keep RemoteCam running in the system tray when closed"
+            visible: !appE2EMode && shellController.trayAvailable
+            text: "Keep running in the system tray when this window is closed"
+            checked: shellController.minimizeToTray
+            onToggled: shellController.minimizeToTray = checked
         }
 
         Label {
@@ -287,7 +656,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             text: appE2EMode
                   ? "This host verifies the phone wire stream and backend state. A desktop live-preview surface is not implemented yet."
-                  : "The virtual camera requests its active NV12 geometry from the producer. Live phone video remains disabled until secure pairing is specified."
+                  : "Production accepts video only after secure pairing. Preview and every output use the same processed frame."
             color: "#7888a2"
             font.pixelSize: 12
             wrapMode: Text.WordWrap
@@ -308,6 +677,7 @@ ApplicationWindow {
             color: "#71819a"
             font.pixelSize: 12
             wrapMode: Text.WordWrap
+        }
         }
     }
 }

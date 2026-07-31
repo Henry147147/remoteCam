@@ -73,7 +73,10 @@ bool validDeviceId(const std::string& value) {
 
 PhoneModel::PhoneModel(PhoneProfile profile) : profile_(std::move(profile)) {}
 
-void PhoneModel::connected() { state_ = SessionState::Connected; }
+void PhoneModel::connected() {
+  state_ = SessionState::Connected;
+  lastFormatGeneration_ = 0;
+}
 
 void PhoneModel::helloSent() { state_ = SessionState::HelloSent; }
 
@@ -128,6 +131,17 @@ ControlEffects PhoneModel::apply(const rc::control::Message& message) {
       return effects;
     }
     const bool isReady = message.type == "ready";
+    if (!isReady) {
+      uint64_t generation = 0;
+      if (!message.unsignedInt("generation", generation) || generation == 0 ||
+          generation <= lastFormatGeneration_) {
+        effects.accepted = false;
+        effects.reason = "set_format generation is missing or not monotonic";
+        return effects;
+      }
+      lastFormatGeneration_ = generation;
+      effects.formatGeneration = generation;
+    }
     config_ = requested;
     effects.becameReady = isReady;
     effects.formatChanged = !isReady;

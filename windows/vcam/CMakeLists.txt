@@ -8,6 +8,8 @@
 add_library(rc-vcam SHARED
     dllmain.cpp
     frame_source.cpp
+    media_format.cpp
+    media_format.h
     media_source.cpp
     media_stream.cpp
     rc-vcam.def
@@ -46,3 +48,19 @@ set_target_properties(rc-vcam PROPERTIES
 # path it writes into InprocServer32 is absolute, so the two must land together.
 # Naming only RUNTIME keeps the import library out of the package.
 install(TARGETS rc-vcam RUNTIME DESTINATION ".")
+
+if(RC_BUILD_TESTS)
+    add_executable(rc-vcam-format-tests
+        tests/media_format_test.cpp
+        media_format.cpp
+    )
+    target_include_directories(rc-vcam-format-tests PRIVATE ".")
+    target_link_libraries(rc-vcam-format-tests PRIVATE
+        rcwin-common
+        mfplat
+        mfuuid
+        ole32
+    )
+    rc_target_strict_warnings(rc-vcam-format-tests)
+    add_test(NAME rc-vcam-format-tests COMMAND rc-vcam-format-tests)
+endif()

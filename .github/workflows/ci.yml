@@ -6,6 +6,9 @@ on:
     tags: ['v*']
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   # The core is where the transform math and wire protocol live, and it is
   # deliberately free of platform APIs so it can be tested on the cheapest runner
@@ -72,36 +75,251 @@ jobs:
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: ctest --test-dir build --output-on-failure
 
-  # The Windows client cannot be cross-compiled from a Linux dev box, so this job is
-  # the only place the Media Foundation and Win32 code gets compiled at all.
-  #
-  # It builds and runs all Windows CTest suites: common/platform seams, concurrent
-  # framed networking, the auth-gated backend, and the stateful fake-phone loopback
-  # matrix. It does NOT verify the virtual camera or desktop pixels: those need an
-  # elevated registration, a real camera consumer, and an interactive desktop.
+  # One production configuration prevents CI from proving FFmpeg, Qt, and packaging
+  # in mutually exclusive builds. It still cannot validate a registered camera or
+  # real desktop pixels on a hosted runner; those remain release checklist items.
   windows-client:
-    name: windows client
+    name: windows production client
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
 
       - name: Select pinned vcpkg baseline
+        shell: pwsh
         run: |
           git -C "$env:VCPKG_INSTALLATION_ROOT" fetch --no-tags --depth=1 origin 9e593bb18ea69cc5095e012465dcd675a822ed0d
           git -C "$env:VCPKG_INSTALLATION_ROOT" checkout --detach 9e593bb18ea69cc5095e012465dcd675a822ed0d
           & "$env:VCPKG_INSTALLATION_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Configure
-        run: >-
-          cmake -S . -B build -A x64 -DRC_BUILD_TESTS=ON -DRC_WITH_FFMPEG=ON
-          -DVCPKG_MANIFEST_FEATURES=ffmpeg
-          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
+      - name: Install NSIS 3.12
+        run: choco install nsis --version=3.12.0 -y --no-progress
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Select signing mode
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $isTag = $env:GITHUB_REF -like 'refs/tags/v*'
+          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:SIGNING_PFX_BASE64)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:SIGNING_PFX_PASSWORD)
+          $willSign = $isTag -and $hasCertificate -and $hasPassword
+          if ($isTag -and ($hasCertificate -xor $hasPassword)) {
+            Write-Warning 'Only one Windows signing secret is configured; this release will be unsigned.'
+          }
+          $status = if ($willSign) { 'signed' } else { 'unsigned' }
+          "RC_SIGN_WINDOWS=$($willSign.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RC_WINDOWS_SIGNING_STATUS=$status" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Configure production preset
+        shell: pwsh
+        run: cmake --preset windows-production "-DRC_WINDOWS_SIGNING_STATUS=$env:RC_WINDOWS_SIGNING_STATUS"
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = (Get-Content build-production/RemoteCamVersion.txt -Raw).Trim()
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Release tag '$env:GITHUB_REF_NAME' must match project version 'v$version'"
+          }
 
       - name: Build
-        run: cmake --build build --config Debug
+        run: cmake --build --preset windows-production
 
       - name: Test
-        run: ctest --test-dir build --build-config Debug --output-on-failure
+        run: ctest --preset windows-production
+
+      - name: QML static analysis
+        run: cmake --build build-production --config Release --target all_qmllint
+
+      - name: Verify binary version metadata
+        shell: pwsh
+        run: |
+          & windows/installer/VerifyVersionInfo.ps1 -VersionFile build-production/RemoteCamVersion.txt -Binaries build-production/bin/RemoteCam.exe,build-production/bin/rc-vcam.dll,build-production/bin/rc-vcam-register.exe
+
+      - name: Sign application binaries
+        if: env.RC_SIGN_WINDOWS == 'true'
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $certificate = Join-Path $env:RUNNER_TEMP 'RemoteCamSigning.pfx'
+          [IO.File]::WriteAllBytes($certificate, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          $windowsKits = Join-Path (Get-Item Env:'ProgramFiles(x86)').Value 'Windows Kits\10\bin'
+          $signTool = Get-ChildItem $windowsKits -Filter signtool.exe -File -Recurse |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $signTool) { throw 'Could not locate the x64 Windows SDK signtool.exe' }
+          foreach ($binary in @(
+              'build-production/bin/RemoteCam.exe',
+              'build-production/bin/rc-vcam.dll',
+              'build-production/bin/rc-vcam-register.exe')) {
+            $signArguments = @(
+              'sign', '/fd', 'SHA256', '/td', 'SHA256',
+              '/tr', 'http://timestamp.digicert.com',
+              '/f', $certificate, '/p', $env:SIGNING_PFX_PASSWORD, $binary)
+            & $signTool.FullName @signArguments
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $binary" }
+          }
+
+      - name: Stage and audit payload
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:GITHUB_WORKSPACE 'build-production\stage'
+          cmake --install build-production --config Release --prefix $stage
+          if ($LASTEXITCODE -ne 0) { throw 'cmake --install failed' }
+          foreach ($pattern in @('libcrypto-*-x64.dll', 'libssl-*-x64.dll')) {
+            $runtime = @(Get-ChildItem -LiteralPath $stage -Filter $pattern -File)
+            if ($runtime.Count -ne 1) {
+              throw "Expected one staged $pattern runtime, found $($runtime.Count)"
+            }
+            $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($runtime[0].FullName).FileVersion
+            if ($version -ne '3.5.7') {
+              throw "$($runtime[0].Name) is OpenSSL $version, expected exactly 3.5.7"
+            }
+          }
+
+      - name: Staged application startup smoke test
+        shell: pwsh
+        run: |
+          $application = Join-Path $env:GITHUB_WORKSPACE 'build-production\stage\RemoteCam.exe'
+          $process = Start-Process -FilePath $application -PassThru -WindowStyle Hidden
+          try {
+            Start-Sleep -Seconds 5
+            if ($process.HasExited) {
+              throw "Staged RemoteCam exited during startup with code $($process.ExitCode)"
+            }
+          } finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+              $process.WaitForExit()
+            }
+          }
+
+      - name: Package
+        run: cpack --config build-production/CPackConfig.cmake -C Release -B dist
+
+      - name: Verify generated installer transaction
+        run: >-
+          cmake
+          -DNSIS_SCRIPT=${{ github.workspace }}/dist/_CPack_Packages/win64/NSIS/project.nsi
+          -P windows/installer/VerifyNsisScript.cmake
+
+      - name: Test installer archive
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/RemoteCam-*-win64.exe)
+          if ($installer.Count -ne 1) { throw "Expected one installer, found $($installer.Count)" }
+          & 7z t $installer[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Installer archive integrity check failed' }
+
+      - name: Sign installer
+        if: env.RC_SIGN_WINDOWS == 'true'
+        shell: pwsh
+        env:
+          SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $certificate = Join-Path $env:RUNNER_TEMP 'RemoteCamSigning.pfx'
+          $windowsKits = Join-Path (Get-Item Env:'ProgramFiles(x86)').Value 'Windows Kits\10\bin'
+          $signTool = Get-ChildItem $windowsKits -Filter signtool.exe -File -Recurse |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          $installer = @(Get-ChildItem dist/RemoteCam-*-win64.exe)
+          if ($installer.Count -ne 1) { throw "Expected one installer, found $($installer.Count)" }
+          $signArguments = @(
+            'sign', '/fd', 'SHA256', '/td', 'SHA256',
+            '/tr', 'http://timestamp.digicert.com',
+            '/f', $certificate, '/p', $env:SIGNING_PFX_PASSWORD, $installer[0].FullName)
+          & $signTool.FullName @signArguments
+          if ($LASTEXITCODE -ne 0) { throw 'signtool failed for the installer' }
+
+      - name: Verify installer elevation manifest
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/RemoteCam-*-win64.exe)
+          if ($installer.Count -ne 1) { throw "Expected one installer, found $($installer.Count)" }
+          $extractRoot = Join-Path $env:RUNNER_TEMP ("RemoteCam-uninstaller-{0}" -f [guid]::NewGuid())
+          New-Item -ItemType Directory -Path $extractRoot | Out-Null
+          try {
+            & 7z e $installer[0].FullName "-o$extractRoot" Uninstall.exe -y
+            if ($LASTEXITCODE -ne 0) { throw 'Could not extract the generated NSIS uninstaller' }
+            $uninstaller = Join-Path $extractRoot 'Uninstall.exe'
+            & windows/installer/VerifyExecutionLevel.ps1 -Binaries $installer[0].FullName,$uninstaller
+          } finally {
+            if (Test-Path -LiteralPath $extractRoot) {
+              Remove-Item -LiteralPath $extractRoot -Recurse -Force
+            }
+          }
+
+      - name: Verify packaged metadata
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/RemoteCam-*-win64.exe)
+          & windows/installer/VerifyVersionInfo.ps1 -VersionFile build-production/RemoteCamVersion.txt -Binaries $installer[0].FullName
+
+      - name: Verify release signatures
+        if: env.RC_SIGN_WINDOWS == 'true'
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/RemoteCam-*-win64.exe)
+          $binaries = @(
+            'build-production/bin/RemoteCam.exe',
+            'build-production/bin/rc-vcam.dll',
+            'build-production/bin/rc-vcam-register.exe',
+            $installer[0].FullName)
+          & windows/installer/VerifyVersionInfo.ps1 -VersionFile build-production/RemoteCamVersion.txt -Binaries $binaries -RequireSignature
+
+      - name: Generate SHA-256 checksum
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/RemoteCam-*-win64.exe)
+          if ($installer.Count -ne 1) { throw "Expected one installer, found $($installer.Count)" }
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer[0].FullName).Hash.ToLowerInvariant()
+          "$hash *$($installer[0].Name)" | Set-Content dist/checksums.sha256 -Encoding ascii
+          Copy-Item build-production/SIGNING-STATUS.txt dist/SIGNING-STATUS.txt
+
+      - name: Generate staged-payload SBOM
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          path: build-production/stage
+          format: spdx-json
+          output-file: dist/RemoteCam-win64.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Remove temporary signing certificate
+        if: always() && env.RC_SIGN_WINDOWS == 'true'
+        shell: pwsh
+        run: |
+          $certificate = Join-Path $env:RUNNER_TEMP 'RemoteCamSigning.pfx'
+          if (Test-Path -LiteralPath $certificate) {
+            Remove-Item -LiteralPath $certificate -Force
+          }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RemoteCam-windows-${{ github.sha }}
+          path: |
+            dist/RemoteCam-*-win64.exe
+            dist/checksums.sha256
+            dist/SIGNING-STATUS.txt
+            dist/RemoteCam-win64.spdx.json
+          if-no-files-found: error
 
   msvc-analyze:
     name: MSVC code analysis
@@ -139,70 +357,6 @@ jobs:
 
       - uses: github/codeql-action/analyze@v4
 
-  # Builds the shippable installer. Separate from windows-client because it needs Qt
-  # and NSIS, builds Release rather than Debug, and would otherwise slow every PR down
-  # for no gain -- a PR cannot break packaging without also breaking the build.
-  #
-  # Like windows-client, this proves nothing about the virtual camera: registration is
-  # an elevated action against a real Frame Server, and the installer's post-install
-  # step is only exercised by actually running the .exe on a Windows 11 machine.
-  installer:
-    name: windows installer
-    runs-on: windows-latest
-    if: github.event_name == 'push'
-    permissions:
-      contents: write   # for the release upload on tags
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install NSIS
-        run: choco install nsis -y --no-progress
-
-      - uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.8.*'
-          arch: win64_msvc2022_64
-
-      - name: Configure
-        run: cmake -S . -B build -A x64 -DRC_BUILD_TESTS=OFF -DRC_BUILD_INSTALLER=ON
-
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Package
-        run: cpack --config build/CPackConfig.cmake -C Release -B build
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: RemoteCam-installer
-          path: build/RemoteCam-*-win64.exe
-          if-no-files-found: error
-
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: build/RemoteCam-*-win64.exe
-          prerelease: true
-          make_latest: false
-          body: |
-            RemoteCam v0.1.0 is a development pre-release.
-
-            Included in the installer: the Windows virtual-camera components, Qt shell,
-            corrected cross-session frame ring, TCP listener, Bonjour discovery, and
-            private-network firewall setup. The source also includes the byte-exact
-            CBOR/framing/control codecs, FFmpeg/D3D11 pipeline seams, ABR controller,
-            the auth-gated backend, and the external rc-fakephone conformance/chaos
-            harness. Test-only RemoteCam-E2E, rc-fakephone, and rc-fakepc executables
-            are not installed; rc-fakepc's insecure path is compiled out of Release.
-
-            Important limitations: production pairing is not implemented, so
-            RemoteCam.exe intentionally will not start an unauthenticated phone stream.
-            There is no live end-to-end iPhone video path in this release. FFmpeg
-            d3d11va decode and the D3D11 transform compile in CI but have not been run
-            on supported hardware. The virtual camera and installer have not been
-            verified against the real consumer/device matrix either.
-
   # The simulator validates the protocol/state-management suite and catches Swift 6
   # concurrency regressions. Capture and hardware encoding still require the device
   # verification documented in ios/README.md.
@@ -230,3 +384,50 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             CODE_SIGNING_ALLOWED=NO \
             test
+
+  release:
+    name: publish Windows release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - core
+      - clang-tidy
+      - sanitizers
+      - windows-client
+      - msvc-analyze
+      - codeql
+      - ios-app
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: RemoteCam-windows-${{ github.sha }}
+          path: release
+
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-checksums: release/checksums.sha256
+
+      - name: Attest SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: release/RemoteCam-*-win64.exe
+          sbom-path: release/RemoteCam-win64.spdx.json
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            release/RemoteCam-*-win64.exe
+            release/checksums.sha256
+            release/SIGNING-STATUS.txt
+            release/RemoteCam-win64.spdx.json
+          body_path: release/SIGNING-STATUS.txt
+          generate_release_notes: true
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

@@ -104,6 +104,45 @@ what to render; it is not a licence to rescale inside `FrameSource`.
 
 ---
 
+## Virtual-camera bridge topology — app-owned unless the physical gate fails
+
+Producer code talks to `rcwin::IVirtualCameraBridge`, whose shipping implementation
+opens the existing writable `FrameRing`. The virtual-camera DLL remains the consumer
+that creates the `Global\` objects in Session 0; the unelevated desktop app remains
+the only frame producer. This abstraction keeps that ownership rule explicit while
+letting pipeline code avoid depending on shared-memory mechanics.
+
+`VirtualCameraBridgeTopology::Brokered` deliberately returns
+`ERROR_NOT_SUPPORTED`. It is an architecture boundary, not a dormant Windows service.
+Do not add, install, or start a broker until the physical M1 gate has proved that an
+unelevated app cannot open the Session 0 objects on a supported Windows build. If that
+gate fails, implement the broker behind this interface so decoder and transform code
+do not change topology along with it.
+
+---
+
+## Virtual-camera media types — fixed 12-type NV12 ladder
+
+The source advertises six canvas sizes — 3840×2160, 2560×1440, 1920×1080,
+1280×720, 960×540, and 640×480 — at both 30 and 60 fps. All types are progressive,
+square-pixel, fixed-size NV12. The default is 1920×1080 at 30 fps; ordering it first
+prevents a consumer that simply accepts the current type from accidentally choosing
+4K60.
+
+`IMFMediaSource::Start` reads the current media type from the presentation descriptor
+the caller passes in. The selected width and height drive the 2D sample allocation,
+NV12 layout validation, and frame-ring geometry request; the selected frame rate
+drives sample duration and the high-resolution timer schedule. There must be no fixed
+1080p30 buffer or pacing constant outside `media_format.h`.
+
+`rc-vcam-format-tests` checks every advertised attribute and round-trips every type.
+The live `rc-vcam-probe --mf` path independently enumerates the camera and fails if any
+of the 12 native types is missing. `--format WxH@FPS` then selects an exact MF type and
+also checks delivered timestamp pacing. These automated checks complement, but cannot
+replace, the elevated registration and Session 0 physical gate.
+
+---
+
 ## `rcvcam::MediaStream` — request queue is bounded
 
 `RequestSample` keeps at most `kMaxPendingRequests` (8) outstanding requests and drops

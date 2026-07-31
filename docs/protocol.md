@@ -100,9 +100,23 @@ Flags:
 | 2 | end of a fragmented message |
 | 3–7 | reserved, must be zero |
 
+The keyframe bit is valid only on channel 1 and must agree with the access unit's VCL
+NAL type. v1 does not fragment at this layer, so a receiver closes the connection if
+bit 2 is present. The encryption bit is valid only after media encryption has been
+explicitly negotiated; an implementation with no negotiated crypto must close rather
+than feed ciphertext to a CBOR or video parser. Audio remains the one reserved v1
+channel and is ignored without counting as progress. Other unknown channels have no
+defined channel key or authenticated schema and close the session.
+
 `pts_micros` is the capture timestamp on the phone's monotonic clock. The PC never
 treats it as wall time; it is used for pacing and for the latency meter, both of
 which only need differences.
+
+All integer and length arguments in v1 CBOR use their shortest encoding. Known v1
+message types reject fields outside their listed schema, including nested camera and
+format maps. An unknown message type may be ignored as an additive extension only
+after its complete session envelope has authenticated successfully; it never extends
+a deadline. There is no unauthenticated extension namespace.
 
 ## Handshake
 
@@ -110,23 +124,114 @@ which only need differences.
 phone → PC   HELLO      {v, device_name, device_id, platform, model, caps}
 PC   → phone SERVER_INFO{v, name, id, caps, paired: bool}
              ── if not paired ──
-PC   → phone PAIR_REQUIRED {salt}
+PC   → phone PAIR_REQUIRED {salt: bstr16, pB: bstr65, expires}
              (PC shows a 6-digit code and a QR encoding host, port and code)
-phone → PC   PAIR_COMMIT  {SPAKE2 message}
-PC   → phone PAIR_CONFIRM {SPAKE2 message, mac}
-phone → PC   PAIR_VERIFY  {mac}
+phone → PC   PAIR_COMMIT  {pA: bstr65}
+PC   → phone PAIR_CONFIRM {macB: bstr32}
+phone → PC   PAIR_VERIFY  {macA: bstr32}
              ── both derive and persist a long-term key ──
+PC   → phone AUTH_CHALLENGE {server_nonce: bstr32, expires}
+phone → PC   AUTH_RESPONSE  {client_nonce: bstr32, client_proof: bstr32}
+PC   → phone AUTH_CONFIRM   {server_proof: bstr32, session_expires}
 PC   → phone READY       {stream_config}
 phone → PC   STREAM_START
 ```
 
-Pairing uses SPAKE2 over the 6-digit code, so the short code never crosses the wire
-and cannot be brute-forced offline. The long-term key is stored in the iOS Keychain
-and via DPAPI on Windows. Reconnects skip straight from `SERVER_INFO` to `READY`.
+`HELLO.v` must equal `1`; v1 does not treat `0` as a compatible subset. `device_id`
+and the PC's advertised `id` are exactly 16 lowercase hexadecimal characters. This
+canonical form is also the pairing-record key, so alternate case, prefixes, shorter
+forms, and non-hex identifiers are rejected rather than aliased.
+
+Pairing uses the exact SPAKE2 profile below over the 6-digit code, so the short code
+never crosses the wire and cannot be brute-forced offline. The long-term key is stored
+in the iOS Keychain and via DPAPI CurrentUser on Windows until explicit unpair; it has
+no time-based re-pair expiry. Reconnects perform the nonce-bound authentication below
+before `READY`.
 
 An unpaired device may complete `HELLO` and nothing else. It cannot stream, cannot
 read settings, and cannot enumerate anything about the PC beyond what the Bonjour
 TXT record already broadcasts.
+
+### Normative pairing and session cryptography
+
+SPAKE2 follows [RFC 9382](https://www.rfc-editor.org/rfc/rfc9382.html), ciphersuite
+P-256/SHA-256. The phone/client is role A and uses M; the PC/server is role B and uses
+N. M is `02886e2f97ace46e55ba9dd7242579f2993b64e16ef3dcab95afd497333d8fa12f`
+and N is `03d8bbd6c639c62937b04d997f38c3770719c629d7014d49a24b4f98baa1292b49`.
+Those constants are compressed SEC1; `pA`, `pB`, and the shared point on the wire or in
+the transcript are exactly 65-byte uncompressed SEC1 points. Receivers require prefix
+`04`, a non-infinity point on P-256, and subgroup order validation.
+
+Role-A identity is the phone's canonical `device_id`; role-B identity is the PC's
+canonical service `id`. The displayed code is exactly six ASCII digits, including
+leading zeroes. It is stretched with scrypt `N=32768, r=8, p=1, maxmem=64 MiB` and a
+fresh 16-byte salt to 40 bytes, interpreted big-endian, reduced modulo the P-256 order,
+and encoded as a 32-byte big-endian scalar `w`. Zero is rejected.
+
+The RFC transcript is exactly
+`len(A)||A||len(B)||B||len(pA)||pA||len(pB)||pB||len(K)||K||len(w)||w`, where every
+`len` is an unsigned 8-byte little-endian integer. `SHA-256(TT) = Ke || Ka`, 16 bytes
+each. The pairing AAD is ASCII `RemoteCam SPAKE2 pairing v1` followed by the 16-byte
+salt. `HKDF-SHA-256(Ka, salt=nil, info="ConfirmationKeys"||AAD, L=32)` splits into
+`KcA || KcB`; `macA = HMAC-SHA-256(KcA, TT)` and likewise for B. Each side persists
+only after verifying the other role's MAC.
+
+The 32-byte long-term key is
+`HKDF-SHA-256(Ke, pairing_salt, "RemoteCam long-term pairing key v1" ||
+len(device_id)||device_id||len(service_id)||service_id, 32)`, with the same 8-byte
+little-endian lengths. Windows protects the complete versioned record with DPAPI
+CurrentUser and an identity-bound optional-entropy string, then atomically replaces it
+using a flushed same-directory temporary file. The v1 expiry sentinel is `UINT64_MAX`;
+unpair deletes the record.
+
+A claimed `device_id` only selects that record. The PC sends a fresh server nonce and
+the phone sends a fresh client nonce. Client and server proofs are HMAC-SHA-256 under
+the long-term key over their distinct ASCII domain (`RemoteCam client authentication
+proof v1` or `RemoteCam server authentication proof v1`), followed by length-prefixed
+device ID, length-prefixed service ID, server nonce, and client nonce. Only a verified
+client proof grants trust. The challenge expires after 10 seconds.
+
+Session keys use HKDF-SHA-256 with the long-term key, salt
+`server_nonce||client_nonce`, and info `RemoteCam session keys v1` followed by the
+same length-prefixed device and service IDs. The 216-byte result splits, in order,
+into six 36-byte records: control A→B, control B→A, video A→B, video B→A, statistics
+A→B, statistics B→A. Each record is a 32-byte key and a session-derived 4-byte nonce
+prefix.
+
+Authenticated control/statistics payloads are
+`sequence_u64_be || plaintext || hmac_sha256`. The MAC input is the exact final
+16-byte wire header, then the same sequence, ASCII `RemoteCam control envelope v1`,
+then plaintext. Encrypted video/statistics payloads are
+`sequence_u64_be || ciphertext || tag16`; nonce is the channel record's 4-byte prefix
+followed by the 8-byte big-endian sequence, and AEAD AAD is the exact final wire header,
+sequence, and ASCII `RemoteCam media envelope v1`. The header therefore authenticates
+payload length, channel, final flags, zero reserved bytes, and PTS.
+
+Sequences start at zero independently for every direction and channel. Replays, gaps,
+and modified AAD fail without advancing the receiver. A session reconnects before
+either 24 hours or `2^32` records on any direction/channel; there is no nonce wrap and
+no recovery fallback. OpenSSL must be exactly 3.5.7 in the Windows production build;
+an absent or different version compiles only a fail-closed unavailable implementation.
+
+### Session state and deadlines
+
+The receiver enforces the message order, not just the happy-path replies:
+
+- `hello` is the first control message and appears exactly once.
+- `stream_start` appears exactly once after `ready`; video before it is discarded.
+- phone telemetry is accepted only after trust. PC-to-phone control types received in
+  the opposite direction are a protocol failure.
+- malformed individual CBOR messages are ignored, and an authenticated unknown
+  additive message type is ignored, but neither extends a deadline. Known types with
+  unexpected fields are malformed. Reserved audio is not activity; other unknown
+  channels have no authenticated v1 schema and fail the session.
+
+The current PC bounds an incomplete session with 5 s for `hello`, 10 s for an
+authentication exchange, 10 s from `ready` to `stream_start`, 5 s for a
+format acknowledgement, 5 s for first/subsequent valid video, and 15 s for other
+authenticated activity. PAKE state expires after 2 minutes. Five failed or unfinished
+attempts in 10 minutes, either from one source address or globally, trigger a 5-minute
+cooldown; successful completion removes only that attempt's provisional charge.
 
 ### What encryption does and does not cover
 
@@ -139,34 +244,41 @@ the network could push control messages that retarget the camera, change resolut
 or start a recording. Authentication of control and confidentiality of media are
 separate properties and only the second one is a user preference.
 
-When the media toggle is on, channels 1–3 are encrypted with ChaCha20-Poly1305 under
-a key derived from the pairing key, nonce = channel ‖ sequence.
+When the media toggle is on, video (channel 1) and statistics (channel 3) are encrypted
+with ChaCha20-Poly1305. With it off, video remains cleartext and statistics use the
+authenticated envelope. Audio is reserved. Keys and nonce prefixes are distinct for
+every direction and channel.
 
 ## Control messages
 
-CBOR maps with a `t` (type) key. Unknown keys are ignored; unknown message types are
-ignored with a warning. That rule is what lets a newer phone talk to an older PC.
+CBOR maps with a `t` (type) key. Each known type has an exact v1 field set. Unknown
+types are the authenticated additive-extension policy described above.
 
 **Phone → PC**
 
 | `t` | Payload | Notes |
 |---|---|---|
 | `hello` | see handshake | |
+| `auth_response` | `{client_nonce: bstr32, client_proof: bstr32}` | cleartext final authentication request |
 | `caps` | camera list, supported resolutions/fps, lens list | sent once after `ready` |
 | `orientation` | `{deg, locked}` | drives auto-rotate on the PC |
 | `camera_state` | current ISO, exposure, WB, focus, zoom, torch | echoed after every change |
 | `thermal` | `{state}` | `nominal`/`fair`/`serious`/`critical` |
 | `battery` | `{level, charging}` | |
 | `error` | `{code, message}` | |
+| `format_ack` | `{generation}` | sent after the requested encoder format is active |
+| `format_reject` | `{generation, code, message}` | rebuild failed; keep the last committed format |
 
 **PC → phone**
 
 | `t` | Payload | Notes |
 |---|---|---|
 | `server_info` | see handshake | |
+| `auth_challenge` | `{server_nonce: bstr32, expires}` | cleartext, 10-second TTL |
+| `auth_confirm` | `{server_proof: bstr32, session_expires}` | final cleartext handshake message |
 | `ready` | `{codec, width, height, fps, bitrate}` | |
 | `set_camera` | `{lens, position}` | front/back, ultra-wide/wide/tele |
-| `set_format` | `{codec, width, height, fps, bitrate}` | |
+| `set_format` | `{codec, width, height, fps, bitrate, generation}` | live changes require an acknowledgement |
 | `set_control` | any subset of ISO, exposure, WB, focus, zoom, torch, stabilization | absent keys mean "leave alone" |
 | `request_keyframe` | `{}` | after a decoder reset |
 | `set_preview` | `{enabled}` | phone stops rendering its own preview — the largest single battery saving available |
@@ -181,10 +293,43 @@ nudges it.
 
 - HEVC preferred, H.264 High as fallback, negotiated in `hello`/`ready`.
 - Annex-B byte stream. Parameter sets (VPS/SPS/PPS) are prepended to every keyframe,
-  not sent once — a receiver that joins or resets mid-stream must be able to decode
-  from the next keyframe with no side channel.
+  before its first random-access slice, not sent once or appended afterwards — a
+  receiver that joins or resets mid-stream must be able to decode from the next
+  keyframe with no side channel. Every video message contains at least one VCL NAL.
 - One access unit per message. No fragmentation at this layer; TCP handles it.
 - Keyframe every ~2 s, plus on demand via `request_keyframe`.
+
+The wire keyframe flag is a claim the receiver verifies, not a substitute for parsing:
+flagged delta frames, unflagged random-access frames, parameter-set-only messages, and
+keyframes whose parameter sets occur after the first random-access slice are dropped.
+Any such failure returns the receiver to "waiting for keyframe" and triggers
+`request_keyframe`.
+
+### Live format changes
+
+The initial `ready`/`stream_start` configuration is implicit generation 0. Every live
+change uses a positive monotonically increasing generation:
+
+```text
+PC    → phone  set_format {codec, width, height, fps, bitrate, generation: N}
+phone → PC     format_ack {generation: N}   # capture/encoder rebuild is complete
+PC    → phone  request_keyframe {}
+phone → PC     video generation N, beginning with a self-contained keyframe
+```
+
+After receiving `set_format`, the phone stops old-generation media, applies the new
+format, and sends the matching acknowledgement before any new-generation media. The
+PC gates media while the acknowledgement is pending, flushes its encoded queue, and
+serializes decoder reset against in-flight decode before accepting generation N. A
+missing or mismatched acknowledgement never commits the new codec and closes the
+session on the format-acknowledgement deadline. This ordering prevents old queued H.264
+from entering a newly rebuilt HEVC decoder (and the converse).
+
+If rebuilding capture or the encoder fails, the phone instead sends
+`format_reject {generation: N, code, message}`. The PC clears only that matching
+pending request, retains its previously committed decoder configuration and stream
+generation, requests a keyframe, and resumes the old format. A rejection with no
+pending request or a mismatched generation is a protocol failure.
 
 The PC decodes with FFmpeg's `d3d11va` hwaccel, which uses the GPU driver's DXVA
 decoder. This matters for a specific reason: Media Foundation's own HEVC decoder
@@ -223,7 +368,7 @@ consistently exceeds its budget is a bug against this table.
 
 ## Versioning
 
-`v` is a single integer. A receiver that sees a higher `v` than it knows refuses the
-connection with a clear message rather than guessing. Additive changes — new control
+`v` is a single integer. A v1 receiver requires exactly `1`; a different value is
+refused rather than guessed at. Additive changes — new control
 message types, new keys, new capability flags — do not bump it; the ignore-unknown
 rules above cover them.

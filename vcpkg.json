@@ -1,7 +1,14 @@
 {
   "name": "remotecam",
   "version-string": "0.1.0",
+  "license": "Apache-2.0",
   "builtin-baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+  "overrides": [
+    {
+      "name": "openssl",
+      "version": "3.5.7"
+    }
+  ],
   "features": {
     "ffmpeg": {
       "description": "LGPL FFmpeg decoder libraries for the Windows d3d11va path",
@@ -11,7 +18,18 @@
           "default-features": false,
           "features": [
             "avcodec"
-          ]
+          ],
+          "platform": "windows & x64"
+        }
+      ]
+    },
+    "openssl": {
+      "description": "OpenSSL 3 libcrypto runtime for production pairing and key derivation",
+      "dependencies": [
+        {
+          "name": "openssl",
+          "default-features": false,
+          "platform": "windows & x64"
         }
       ]
     }

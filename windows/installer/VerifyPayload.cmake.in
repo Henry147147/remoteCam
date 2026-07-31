@@ -1,0 +1,51 @@
+# Runs inside cmake --install and CPack's private install tree.
+set(_rc_payload_root "${CMAKE_INSTALL_PREFIX}")
+set(_rc_required_files
+    "RemoteCam.exe"
+    "rc-vcam.dll"
+    "rc-vcam-register.exe"
+    "@RC_FFMPEG_AVCODEC_NAME@"
+    "@RC_FFMPEG_AVUTIL_NAME@"
+    "@RC_OPENSSL_CRYPTO_NAME@"
+    "@RC_OPENSSL_SSL_NAME@"
+    "LICENSE.txt"
+    "THIRD-PARTY-NOTICES.txt"
+    "GPL-3.0.txt"
+    "LGPL-3.0.txt"
+    "FFMPEG-LGPL-2.1.txt"
+    "OPENSSL-LICENSE.txt")
+list(APPEND _rc_required_files "SIGNING-STATUS.txt")
+
+foreach(_rc_required_file IN LISTS _rc_required_files)
+    if(NOT EXISTS "${_rc_payload_root}/${_rc_required_file}")
+        message(FATAL_ERROR
+            "Release payload is missing ${_rc_required_file}: ${_rc_payload_root}")
+    endif()
+endforeach()
+
+file(READ "${_rc_payload_root}/SIGNING-STATUS.txt" _rc_signing_status)
+if(NOT _rc_signing_status MATCHES
+   "RemoteCam Windows artifact signing status: (signed|unsigned)")
+    message(FATAL_ERROR "SIGNING-STATUS.txt does not declare signed or unsigned")
+endif()
+
+# Test harnesses and probes exercise intentionally insecure or synthetic paths and
+# must never become an install rule by accident. Compare case-insensitively because
+# Windows filenames are case-insensitive even when CMake's string operations are not.
+file(GLOB_RECURSE _rc_payload_files LIST_DIRECTORIES FALSE "${_rc_payload_root}/*")
+set(_rc_forbidden_names
+    "remotecam-e2e.exe"
+    "rc-fakepc.exe"
+    "rc-fakephone.exe"
+    "rc-fakewriter.exe"
+    "rc-vcam-probe.exe")
+foreach(_rc_payload_file IN LISTS _rc_payload_files)
+    get_filename_component(_rc_payload_name "${_rc_payload_file}" NAME)
+    string(TOLOWER "${_rc_payload_name}" _rc_payload_name_lower)
+    if(_rc_payload_name_lower IN_LIST _rc_forbidden_names)
+        message(FATAL_ERROR
+            "Test-only executable leaked into the release payload: ${_rc_payload_file}")
+    endif()
+endforeach()
+
+message(STATUS "Verified RemoteCam release payload at ${_rc_payload_root}")

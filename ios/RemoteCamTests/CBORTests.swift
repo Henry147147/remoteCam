@@ -36,4 +36,18 @@ final class CBORTests: XCTestCase {
             XCTAssertEqual(error as? CBORError, .duplicateMapKey("t"))
         }
     }
+
+    func testRejectsNonMinimalIntegersAndLengths() {
+        for encoded in [
+            Data([0x18, 0x17]),                         // 23 encoded in one extra byte
+            Data([0x19, 0x00, 0xff]),                   // 255 encoded in two extra bytes
+            Data([0x1a, 0x00, 0x00, 0xff, 0xff]),       // 65535 encoded in four bytes
+            Data([0x1b, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff]),
+            Data([0x78, 0x01, 0x61])                    // one-byte string with wide length
+        ] {
+            XCTAssertThrowsError(try CBORDecoder.decode(encoded)) { error in
+                XCTAssertEqual(error as? CBORError, .nonMinimalInteger)
+            }
+        }
+    }
 }

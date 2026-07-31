@@ -26,6 +26,7 @@
 #include "rcwin/hr.h"
 #include "rcwin/shm_ring.h"
 #include "rcwin/test_pattern.h"
+#include "rcwin/virtual_camera_bridge.h"
 
 namespace {
 
@@ -694,6 +695,70 @@ void testRingGeometryNegotiation() {
           "a new consumer generation clears the previous request");
 }
 
+void testVirtualCameraBridgeBoundary() {
+  std::printf("Virtual-camera bridge topology boundary\n");
+
+  std::unique_ptr<rcwin::IVirtualCameraBridge> bridge;
+  checkEq(rcwin::createVirtualCameraBridge(rcwin::VirtualCameraBridgeTopology::Brokered,
+                                           bridge, rcwin::testRingNames()),
+          HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
+          "broker topology stays unavailable before the physical gate");
+  check(!bridge, "unsupported broker topology returns no partial object");
+  checkEq(rcwin::createVirtualCameraBridge(
+              static_cast<rcwin::VirtualCameraBridgeTopology>(999), bridge,
+              rcwin::testRingNames()),
+          E_INVALIDARG, "unknown bridge topology is rejected");
+  check(!bridge, "invalid topology returns no partial object");
+
+  check(SUCCEEDED(rcwin::createVirtualCameraBridge(
+            rcwin::VirtualCameraBridgeTopology::AppOwned, bridge, rcwin::testRingNames())),
+        "app-owned bridge is constructible");
+  check(bridge && bridge->topology() == rcwin::VirtualCameraBridgeTopology::AppOwned,
+        "bridge reports the direct app-owned topology");
+  check(!bridge->connected(), "new bridge starts detached");
+
+  rcwin::FrameRing consumer;
+  check(SUCCEEDED(consumer.create(rcwin::testRingNames())),
+        "camera-side consumer creates the bridge ring");
+  check(SUCCEEDED(bridge->open()), "app-owned bridge opens the consumer-owned ring");
+  check(bridge->connected(), "bridge reports its live attachment");
+
+  check(SUCCEEDED(consumer.requestGeometry(640, 480, rcwin::kFourccNv12)),
+        "camera-side consumer requests output geometry through the ring");
+  uint32_t width = 0, height = 0, format = 0;
+  checkEq(bridge->requestedGeometry(width, height, format), S_OK,
+          "bridge exposes the consumer's requested geometry");
+  checkEq(width, 640, "bridge geometry width");
+  checkEq(height, 480, "bridge geometry height");
+  checkEq(format, rcwin::kFourccNv12, "bridge geometry format");
+
+  const rcwin::Nv12Layout layout = rcwin::nv12Layout(640, 480);
+  std::vector<uint8_t> frame(layout.totalSize);
+  rcwin::renderPattern(frame.data(), layout, 7, rcwin::PatternStyle::Writer);
+  rcwin::FrameInfo info;
+  info.width = 640;
+  info.height = 480;
+  info.stride = 640;
+  info.format = rcwin::kFourccNv12;
+  info.ptsMicros = 123456;
+  info.bytesUsed = static_cast<uint32_t>(frame.size());
+  check(SUCCEEDED(bridge->publish(frame.data(), static_cast<uint32_t>(frame.size()), info)),
+        "bridge publishes through the existing frame-ring contract");
+
+  std::vector<uint8_t> received(frame.size());
+  rcwin::FrameInfo receivedInfo;
+  checkEq(consumer.readLatest(received.data(), static_cast<uint32_t>(received.size()),
+                              receivedInfo),
+          S_OK, "camera-side consumer reads a bridged frame");
+  check(received == frame, "bridge does not alter frame bytes");
+  checkEq(static_cast<long long>(receivedInfo.ptsMicros), 123456,
+          "bridge preserves frame metadata");
+
+  bridge->close();
+  check(!bridge->connected(), "bridge close releases the producer claim");
+  consumer.close();
+}
+
 // Child mode for testRingReclaimsCrashedProducer: claim the ring, say so, block until
 // killed. Never exits on its own -- the parent's TerminateProcess is the point.
 int holdProducerUntilKilled() {
@@ -728,6 +793,7 @@ int main(int argc, char** argv) {
   testRingEnforcesSingleProducer();
   testRingReclaimsCrashedProducer(selfPath);
   testRingGeometryNegotiation();
+  testVirtualCameraBridgeBoundary();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

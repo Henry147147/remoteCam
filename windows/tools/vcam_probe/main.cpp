@@ -29,9 +29,13 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "rcwin/guids.h"
@@ -82,6 +86,23 @@ struct FrameStat {
   long long timestamp100ns = 0;
 };
 
+struct ProbeFormat {
+  UINT32 width = 0;
+  UINT32 height = 0;
+  UINT32 fps = 0;
+
+  bool specified() const { return width != 0; }
+};
+
+using FormatKey = std::tuple<UINT32, UINT32, UINT32>;
+
+constexpr std::array<ProbeFormat, 12> kExpectedLadder = {{
+    {1920, 1080, 30}, {1920, 1080, 60}, {3840, 2160, 30},
+    {3840, 2160, 60}, {2560, 1440, 30}, {2560, 1440, 60},
+    {1280, 720, 30},  {1280, 720, 60},  {960, 540, 30},
+    {960, 540, 60},   {640, 480, 30},   {640, 480, 60},
+}};
+
 // MF_SOURCE_READER_FIRST_VIDEO_STREAM is an enumerator whose value (0xFFFFFFFC) does
 // not fit the signed enum type the SDK gives it, so passing it directly to a DWORD
 // parameter warns at /W4. Converted once here rather than casting at each call site.
@@ -115,7 +136,8 @@ void analyse(const uint8_t* nv12, int stride, int width, int height, FrameStat& 
 
 // The verdict. Both properties are reported even when one fails, because knowing which
 // of the two broke is most of the diagnosis.
-int report(const wchar_t* label, const std::vector<FrameStat>& frames, bool regionsValid) {
+int report(const wchar_t* label, const std::vector<FrameStat>& frames, bool regionsValid,
+           UINT32 expectedFps) {
   std::wprintf(L"\n--- %s: %zu frames ---\n", label, frames.size());
   if (frames.empty()) {
     std::wprintf(L"FAIL: no frames delivered\n");
@@ -138,13 +160,22 @@ int report(const wchar_t* label, const std::vector<FrameStat>& frames, bool regi
                meanMs > 0.0 ? 1000.0 / meanMs : 0.0);
   std::wprintf(L"  max jitter    : %.2f ms\n", maxJitterMs);
 
+  bool pacingValid = true;
+  if (expectedFps != 0 && frames.size() > 1) {
+    const double expectedMs = 1000.0 / static_cast<double>(expectedFps);
+    const double toleranceMs = (std::max)(2.0, expectedMs * 0.15);
+    pacingValid = std::abs(meanMs - expectedMs) <= toleranceMs;
+    std::wprintf(L"  pacing        : %s (expected %.2f ms at %u fps)\n",
+                 pacingValid ? L"PASS" : L"FAIL", expectedMs, expectedFps);
+  }
+
   if (!regionsValid) {
     // Region hashing only means something when the frames really are NV12 in our
     // geometry. Saying so beats printing a confident PASS derived from bytes we did
     // not understand.
     std::wprintf(L"  region checks : SKIPPED (format is not the expected NV12 geometry)\n");
     std::wprintf(L"%s: frames delivered, format unverified\n", label);
-    return 0;
+    return pacingValid ? 0 : 1;
   }
 
   size_t staticChanges = 0;
@@ -162,9 +193,35 @@ int report(const wchar_t* label, const std::vector<FrameStat>& frames, bool regi
                movingRepeats == 0 ? L"ADVANCING  PASS" : L"REPEATED  FAIL", movingRepeats,
                frames.size() - 1);
 
-  const bool ok = staticChanges == 0 && movingRepeats == 0;
+  const bool ok = staticChanges == 0 && movingRepeats == 0 && pacingValid;
   std::wprintf(L"%s: %s\n", label, ok ? L"PASS" : L"FAIL");
   return ok ? 0 : 1;
+}
+
+bool parseProbeFormat(const wchar_t* text, ProbeFormat& out) {
+  if (text == nullptr) return false;
+  wchar_t* end = nullptr;
+  const unsigned long width = std::wcstoul(text, &end, 10);
+  if (end == text || (*end != L'x' && *end != L'X')) return false;
+  const wchar_t* heightText = end + 1;
+  const unsigned long height = std::wcstoul(heightText, &end, 10);
+  if (end == heightText || *end != L'@') return false;
+  const wchar_t* fpsText = end + 1;
+  const unsigned long fps = std::wcstoul(fpsText, &end, 10);
+  if (end == fpsText || *end != L'\0' || width > UINT32_MAX || height > UINT32_MAX ||
+      fps > UINT32_MAX) {
+    return false;
+  }
+  const ProbeFormat parsed{static_cast<UINT32>(width), static_cast<UINT32>(height),
+                           static_cast<UINT32>(fps)};
+  for (const ProbeFormat& expected : kExpectedLadder) {
+    if (expected.width == parsed.width && expected.height == parsed.height &&
+        expected.fps == parsed.fps) {
+      out = parsed;
+      return true;
+    }
+  }
+  return false;
 }
 
 void writeRaw(const std::wstring& dir, size_t index, const uint8_t* data, size_t bytes) {
@@ -212,7 +269,64 @@ HRESULT findMfDevice(const std::wstring& name, IMFActivate** out) {
   return hr;
 }
 
-int runMf(const std::wstring& name, int wanted, const std::wstring& outDir) {
+int verifyMfLadder(IMFSourceReader* reader, const ProbeFormat& requested,
+                   IMFMediaType** selectedType) {
+  if (reader == nullptr || selectedType == nullptr) return 1;
+  *selectedType = nullptr;
+
+  std::set<FormatKey> actual;
+  ComPtr<IMFMediaType> requestedType;
+  for (DWORD index = 0;; ++index) {
+    ComPtr<IMFMediaType> type;
+    const HRESULT hr = reader->GetNativeMediaType(kFirstVideoStream, index, &type);
+    if (hr == MF_E_NO_MORE_TYPES) break;
+    if (FAILED(hr)) {
+      std::wprintf(L"MF: native media-type enumeration failed at %u: %s\n", index,
+                   rcwin::hrMessage(hr).c_str());
+      return 1;
+    }
+
+    GUID subtype = GUID_NULL;
+    UINT32 width = 0, height = 0, numerator = 0, denominator = 0;
+    if (FAILED(type->GetGUID(MF_MT_SUBTYPE, &subtype)) ||
+        subtype != MFVideoFormat_NV12 ||
+        FAILED(::MFGetAttributeSize(type.Get(), MF_MT_FRAME_SIZE, &width, &height)) ||
+        FAILED(::MFGetAttributeRatio(type.Get(), MF_MT_FRAME_RATE, &numerator,
+                                     &denominator)) ||
+        denominator == 0 || numerator % denominator != 0) {
+      continue;
+    }
+
+    const UINT32 fps = numerator / denominator;
+    actual.emplace(width, height, fps);
+    if (requested.specified() && width == requested.width && height == requested.height &&
+        fps == requested.fps) {
+      requestedType = type;
+    }
+  }
+
+  bool complete = true;
+  for (const ProbeFormat& expected : kExpectedLadder) {
+    if (!actual.contains({expected.width, expected.height, expected.fps})) {
+      complete = false;
+      std::wprintf(L"MF: missing native NV12 type %ux%u@%u\n", expected.width,
+                   expected.height, expected.fps);
+    }
+  }
+  std::wprintf(L"MF: NV12 format ladder %s (%zu expected types visible)\n",
+               complete ? L"PASS" : L"FAIL", actual.size());
+
+  if (requested.specified() && !requestedType) {
+    std::wprintf(L"MF: requested type %ux%u@%u is not available\n", requested.width,
+                 requested.height, requested.fps);
+    return 1;
+  }
+  if (requestedType) requestedType.CopyTo(selectedType);
+  return complete ? 0 : 1;
+}
+
+int runMf(const std::wstring& name, int wanted, const std::wstring& outDir,
+          const ProbeFormat& requested) {
   ComPtr<IMFActivate> activate;
   HRESULT hr = findMfDevice(name, &activate);
   if (FAILED(hr)) {
@@ -237,15 +351,37 @@ int runMf(const std::wstring& name, int wanted, const std::wstring& outDir) {
     return 1;
   }
 
+  ComPtr<IMFMediaType> requestedType;
+  const int ladderResult = verifyMfLadder(reader.Get(), requested, &requestedType);
+  if (requested.specified() && !requestedType) {
+    source->Shutdown();
+    activate->ShutdownObject();
+    return 1;
+  }
+  if (requestedType) {
+    hr = reader->SetCurrentMediaType(kFirstVideoStream, nullptr, requestedType.Get());
+    if (FAILED(hr)) {
+      std::wprintf(L"MF: selecting %ux%u@%u failed: %s\n", requested.width,
+                   requested.height, requested.fps, rcwin::hrMessage(hr).c_str());
+      source->Shutdown();
+      activate->ShutdownObject();
+      return 1;
+    }
+  }
+
   ComPtr<IMFMediaType> type;
   UINT32 width = 0, height = 0;
+  UINT32 fpsNumerator = 0, fpsDenominator = 0;
   GUID subtype = GUID_NULL;
   if (SUCCEEDED(reader->GetCurrentMediaType(kFirstVideoStream, &type))) {
     ::MFGetAttributeSize(type.Get(), MF_MT_FRAME_SIZE, &width, &height);
+    ::MFGetAttributeRatio(type.Get(), MF_MT_FRAME_RATE, &fpsNumerator, &fpsDenominator);
     type->GetGUID(MF_MT_SUBTYPE, &subtype);
   }
   const bool isNv12 = subtype == MFVideoFormat_NV12;
-  std::wprintf(L"MF: %ux%u, subtype %s\n", width, height, isNv12 ? L"NV12" : L"(not NV12)");
+  const UINT32 activeFps = fpsDenominator == 0 ? 0 : fpsNumerator / fpsDenominator;
+  std::wprintf(L"MF: %ux%u@%u, subtype %s\n", width, height, activeFps,
+               isNv12 ? L"NV12" : L"(not NV12)");
 
   std::vector<FrameStat> frames;
   frames.reserve(static_cast<size_t>(wanted));
@@ -307,7 +443,8 @@ int runMf(const std::wstring& name, int wanted, const std::wstring& outDir) {
 
   source->Shutdown();
   activate->ShutdownObject();
-  return report(L"Media Foundation", frames, isNv12 && width > 0);
+  return ladderResult |
+         report(L"Media Foundation", frames, isNv12 && width > 0, activeFps);
 }
 
 // --- DirectShow path --------------------------------------------------------
@@ -467,6 +604,7 @@ int runDshow(const std::wstring& name, int wanted, const std::wstring& outDir) {
 
   AM_MEDIA_TYPE connected{};
   int width = 0, height = 0;
+  UINT32 activeFps = 0;
   bool nv12 = false;
   if (SUCCEEDED(grabber->GetConnectedMediaType(&connected))) {
     nv12 = connected.subtype == MEDIASUBTYPE_NV12;
@@ -475,11 +613,16 @@ int runDshow(const std::wstring& name, int wanted, const std::wstring& outDir) {
       const auto* vih = reinterpret_cast<VIDEOINFOHEADER*>(connected.pbFormat);
       width = vih->bmiHeader.biWidth;
       height = std::abs(vih->bmiHeader.biHeight);
+      if (vih->AvgTimePerFrame > 0) {
+        activeFps = static_cast<UINT32>(
+            std::llround(10000000.0 / static_cast<double>(vih->AvgTimePerFrame)));
+      }
     }
     if (connected.pbFormat) ::CoTaskMemFree(connected.pbFormat);
     if (connected.pUnk) connected.pUnk->Release();
   }
-  std::wprintf(L"DirectShow: %dx%d, subtype %s\n", width, height, nv12 ? L"NV12" : L"(other)");
+  std::wprintf(L"DirectShow: %dx%d@%u, subtype %s\n", width, height, activeFps,
+               nv12 ? L"NV12" : L"(other)");
 
   GrabberCallback callback(wanted, width, height, nv12, outDir);
   RC_RETURN_IF_FAILED(grabber->SetCallback(&callback, 1 /* BufferCB */));
@@ -498,7 +641,7 @@ int runDshow(const std::wstring& name, int wanted, const std::wstring& outDir) {
   if (wait == WAIT_TIMEOUT) {
     std::wprintf(L"DirectShow: timed out after %u ms\n", timeoutMs);
   }
-  return report(L"DirectShow", callback.frames(), nv12 && width > 0);
+  return report(L"DirectShow", callback.frames(), nv12 && width > 0, activeFps);
 }
 
 // --- enumeration ------------------------------------------------------------
@@ -566,6 +709,7 @@ int usage() {
       L"  --mf                  capture through Media Foundation\n"
       L"  --directshow          capture through DirectShow\n"
       L"  --frames N            how many frames to capture (default 60)\n"
+      L"  --format WxH@FPS       select an exact MF native type (for example 1280x720@60)\n"
       L"  --name NAME           device friendly name (default \"RemoteCam\")\n"
       L"  --out DIR             also write each frame as raw .nv12\n"
       L"\n"
@@ -583,6 +727,7 @@ int wmain(int argc, wchar_t** argv) {
   int frames = 60;
   std::wstring name = rcwin::kFriendlyName;
   std::wstring outDir;
+  ProbeFormat requestedFormat;
 
   for (int i = 1; i < argc; ++i) {
     const std::wstring arg = argv[i];
@@ -595,6 +740,11 @@ int wmain(int argc, wchar_t** argv) {
       doDshow = true;
     } else if (arg == L"--frames" && hasValue) {
       frames = _wtoi(argv[++i]);
+    } else if (arg == L"--format" && hasValue) {
+      if (!parseProbeFormat(argv[++i], requestedFormat)) {
+        std::wprintf(L"Invalid format. Expected one of the supported WxH@30/60 types.\n\n");
+        return usage();
+      }
     } else if (arg == L"--name" && hasValue) {
       name = argv[++i];
     } else if (arg == L"--out" && hasValue) {
@@ -605,6 +755,10 @@ int wmain(int argc, wchar_t** argv) {
     }
   }
   if (!doList && !doMf && !doDshow) return usage();
+  if (requestedFormat.specified() && !doMf) {
+    std::wprintf(L"--format applies to the Media Foundation path; add --mf.\n\n");
+    return usage();
+  }
   if (frames < 2) frames = 2;
 
   HRESULT hr = ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -621,7 +775,7 @@ int wmain(int argc, wchar_t** argv) {
 
   int exitCode = 0;
   if (doList) listDevices();
-  if (doMf) exitCode |= runMf(name, frames, outDir);
+  if (doMf) exitCode |= runMf(name, frames, outDir, requestedFormat);
   if (doDshow) exitCode |= runDshow(name, frames, outDir);
 
   ::MFShutdown();

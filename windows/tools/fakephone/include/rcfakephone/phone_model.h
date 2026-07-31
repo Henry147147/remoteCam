@@ -40,6 +40,7 @@ struct ControlEffects {
   bool accepted = true;
   bool becameReady = false;
   bool formatChanged = false;
+  uint64_t formatGeneration = 0;
   bool cameraChanged = false;
   bool controlsChanged = false;
   bool previewChanged = false;
@@ -76,6 +77,7 @@ class PhoneModel {
   SessionState state_ = SessionState::Disconnected;
   bool previewEnabled_ = true;
   uint64_t targetBitrate_ = 0;
+  uint64_t lastFormatGeneration_ = 0;
 };
 
 }  // namespace rcfakephone
