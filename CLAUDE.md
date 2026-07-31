@@ -241,15 +241,18 @@ NV12 D3D11 transform, PTS-preserving pipeline, and ABR controller. It compiles
 against pinned LGPL FFmpeg 8.1.2 and its seam tests pass, but no decoder/GPU hardware
 path or iPhone-to-virtual-camera stream has been run.
 
-**iOS client written and building, not device-verified.** `ios/RemoteCam.xcodeproj`
+**iOS client written and partially device-verified.** `ios/RemoteCam.xcodeproj`
 contains Bonjour/manual/recent connections, framed TCP and deterministic CBOR,
 AVCapture multi-lens/manual controls, low-latency H.264/HEVC VideoToolbox encode,
 reconnect, telemetry, background multitasking setup, preview power saving, and a
-Live Activity. The simulator suite has 12 passing tests and one hardware-encoder
-skip; Release compiles for the iPhoneOS SDK. A clean signed install is blocked by
-missing local provisioning and Developer Mode. Secure pairing, authenticated
-control/media encryption, and USB are blocked on the joint decisions listed in
-`docs/ios-backend-handoff.md`; Release rejects unauthenticated streaming.
+Live Activity. The simulator suite has 16 passing tests and one hardware-encoder
+skip; Release compiles for the iPhoneOS SDK. A signed Debug build now runs on an
+iPhone 17 Pro Max: startup camera authorization/enumeration and the Wi-Fi
+`hello` / `server_info` exchange with Windows were observed. The run stopped at the
+expected production pairing gate; capture, encoding, and live video remain
+unverified. Secure pairing, authenticated control/media encryption, and USB are
+blocked on the joint decisions listed in `docs/ios-backend-handoff.md`; Release
+rejects unauthenticated streaming.
 
 **Installer packaged locally, elevated install still unverified.**
 `RemoteCam-0.1.0-win64.exe` was generated with CPack + NSIS, its archive integrity

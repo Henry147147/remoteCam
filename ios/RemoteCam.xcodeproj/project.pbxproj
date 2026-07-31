@@ -99,7 +99,7 @@
 		5F1B2C22F134EA8B88845432 /* RemoteCamActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RemoteCamActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5FDF0654E5C442EAAC2F6560 /* WireFrameTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrameTests.swift; path = RemoteCamTests/WireFrameTests.swift; sourceTree = "<group>"; };
 		63EA1CC6EEE1B27238B25A24 /* BonjourBrowser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BonjourBrowser.swift; path = RemoteCam/Sources/Discovery/BonjourBrowser.swift; sourceTree = "<group>"; };
-		6A1E183FAA759B570F17E91C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = RemoteCam/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6A1E183FAA759B570F17E91C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = RemoteCam/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6A7A2D456ED0DAD46A34DF8B /* RemoteCam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RemoteCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6DBDAF963F0159BFEBB19CD4 /* DeviceTelemetry.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceTelemetry.swift; path = RemoteCam/Sources/Telemetry/DeviceTelemetry.swift; sourceTree = "<group>"; };
 		6ECB7F916373206876EE4BCC /* RemoteCamSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamSession.swift; path = RemoteCam/Sources/Network/RemoteCamSession.swift; sourceTree = "<group>"; };
@@ -320,6 +320,19 @@
 			attributes = {
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					069066F81C8AFC1A0D48262A = {
+						ProvisioningStyle = Automatic;
+					};
+					3C43CC16BC11FD4836DE59C7 = {
+						DevelopmentTeam = ZL2L2PUN78;
+						ProvisioningStyle = Automatic;
+					};
+					D96320877AA433BE2C943DCC = {
+						DevelopmentTeam = ZL2L2PUN78;
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = 8E4A91602FD70FD752643313 /* Build configuration list for PBXProject "RemoteCam" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -330,8 +343,6 @@
 				Base,
 			);
 			mainGroup = D3CB512496A4A8F54D3C2CDA;
-			minimizedProjectReferenceProxies = 0;
-			preferredProjectObjectVersion = 100;
 			productRefGroup = FA56820F47F6D4880040E1FB /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -552,8 +563,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -583,6 +593,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZL2L2PUN78;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RemoteCam/Configuration/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -621,6 +632,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZL2L2PUN78;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RemoteCam/Configuration/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -643,6 +655,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZL2L2PUN78;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RemoteCamActivity/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -664,6 +677,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZL2L2PUN78;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RemoteCamActivity/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

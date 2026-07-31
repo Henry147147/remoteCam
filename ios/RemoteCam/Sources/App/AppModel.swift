@@ -21,8 +21,10 @@ final class AppModel: ObservableObject {
     private var lastTelemetry: DeviceTelemetrySnapshot?
     private var streamGeneration = 0
     private var lastFormatGeneration: UInt64 = 0
+    private var hasStarted = false
 
     init() {
+        RemoteCamLog.info("app", "AppModel initialized; iOS=\(UIDevice.current.systemVersion)")
         let encoder = self.encoder
         camera = CameraController { sampleBuffer in encoder.encode(sampleBuffer) }
 
@@ -57,13 +59,18 @@ final class AppModel: ObservableObject {
             Task { @MainActor in remoteSession?.sendVideo(unit) }
         }
         encoder.onError = { [weak self] error in
+            RemoteCamLog.error("encoder", "runtime error: \(error.localizedDescription)")
             Task { @MainActor in self?.streamError = error.localizedDescription }
         }
         telemetry.onUpdate = { [weak self] snapshot in self?.sendTelemetry(snapshot) }
     }
 
     func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        RemoteCamLog.info("app", "starting app services")
         discovery.start()
+        Task { await camera.requestPermissionAndLoadCapabilities() }
     }
 
     func connect(to host: RemoteHost) {
@@ -76,6 +83,7 @@ final class AppModel: ObservableObject {
             endpoint = nil
         }
         guard let endpoint else {
+            RemoteCamLog.error("app", "no reachable endpoint for selected host")
             connectionPhase = .failed("This computer no longer has a reachable network endpoint.")
             return
         }
@@ -83,6 +91,7 @@ final class AppModel: ObservableObject {
     }
 
     func disconnect() {
+        RemoteCamLog.info("app", "disconnect requested")
         streamGeneration &+= 1
         lastFormatGeneration = 0
         remoteSession.setVideoSuspended(true)
@@ -141,6 +150,7 @@ final class AppModel: ObservableObject {
         configuration: StreamConfiguration,
         generation: Int
     ) async {
+        RemoteCamLog.info("app", "starting stream generation=\(generation)")
         do {
             guard generation == streamGeneration else { return }
             let configuration = try configuration.validated()
@@ -164,8 +174,10 @@ final class AppModel: ObservableObject {
             remoteSession.markStreaming(configuration: configuration)
             encoder.requestKeyframe()
             remoteSession.setVideoSuspended(false)
+            RemoteCamLog.info("app", "stream started generation=\(generation)")
             sendTelemetry(telemetry.snapshot, force: true)
         } catch {
+            RemoteCamLog.error("app", "stream start failed: \(error.localizedDescription)")
             guard generation == streamGeneration else { return }
             encoder.invalidate()
             await camera.stop()

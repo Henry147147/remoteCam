@@ -61,6 +61,10 @@ actor CaptureEngine {
 
     func configure(_ configuration: StreamConfiguration, deviceID: String? = nil) throws -> CameraControlState {
         let configuration = try configuration.validated()
+        RemoteCamLog.info(
+            "capture",
+            "configuring \(configuration.width)x\(configuration.height) at \(configuration.framesPerSecond) fps"
+        )
         let devices = Self.discoverDevices()
         guard let device = devices.first(where: { $0.uniqueID == deviceID })
                 ?? devices.first(where: { $0.position == .back && Self.isVirtualMultiLens($0.deviceType) })
@@ -70,6 +74,11 @@ actor CaptureEngine {
         }
 
         let newInput = try AVCaptureDeviceInput(device: device)
+        RemoteCamLog.info(
+            "capture",
+            "selected camera name=\(device.localizedName), position=\(device.position.rawValue), " +
+                "type=\(device.deviceType.rawValue)"
+        )
         try Self.selectFormat(on: device, configuration: configuration)
 
         session.beginConfiguration()
@@ -113,6 +122,11 @@ actor CaptureEngine {
         if session.isMultitaskingCameraAccessSupported {
             session.isMultitaskingCameraAccessEnabled = true
         }
+        RemoteCamLog.info(
+            "capture",
+            "configuration committed; multitasking_supported=\(session.isMultitaskingCameraAccessSupported), " +
+                "multitasking_enabled=\(session.isMultitaskingCameraAccessEnabled)"
+        )
 
         self.input = newInput
         selectedDevice = device
@@ -122,12 +136,16 @@ actor CaptureEngine {
 
     func start() {
         guard !session.isRunning else { return }
+        RemoteCamLog.info("capture", "starting AVCaptureSession")
         session.startRunning()
+        RemoteCamLog.info("capture", "AVCaptureSession running=\(session.isRunning)")
     }
 
     func stop() {
         guard session.isRunning else { return }
+        RemoteCamLog.info("capture", "stopping AVCaptureSession")
         session.stopRunning()
+        RemoteCamLog.info("capture", "AVCaptureSession stopped")
     }
 
     func switchCamera(deviceID: String) throws -> CameraControlState {

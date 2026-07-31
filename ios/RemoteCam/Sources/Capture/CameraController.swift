@@ -27,7 +27,18 @@ final class CameraController: ObservableObject {
         observeSession()
     }
 
-    func prepare(configuration: StreamConfiguration) async throws {
+    func requestPermissionAndLoadCapabilities() async {
+        guard await requestPermission() else { return }
+        cameras = await engine.availableCameras()
+        capabilities = await engine.capabilities()
+        RemoteCamLog.info(
+            "camera",
+            "setup complete; devices=\(cameras.count), capabilities=\(capabilities.count)"
+        )
+    }
+
+    private func requestPermission() async -> Bool {
+        RemoteCamLog.info("camera", "preparing camera")
         let authorized: Bool
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -38,19 +49,25 @@ final class CameraController: ObservableObject {
             authorized = false
         }
         permission = authorized ? .granted : .denied
-        guard authorized else {
+        RemoteCamLog.info("camera", "authorization=\(authorized ? "granted" : "denied")")
+        return authorized
+    }
+
+    func prepare(configuration: StreamConfiguration) async throws {
+        guard await requestPermission() else {
             throw CaptureEngineError.configurationFailed("Camera access is required to stream.")
         }
-
-        cameras = await engine.availableCameras()
-        capabilities = await engine.capabilities()
+        if cameras.isEmpty { cameras = await engine.availableCameras() }
+        if capabilities.isEmpty { capabilities = await engine.capabilities() }
         controls = try await engine.configure(configuration, deviceID: controls.deviceID)
         await engine.start()
         isRunning = true
         errorMessage = nil
+        RemoteCamLog.info("camera", "camera prepared; devices=\(cameras.count), capabilities=\(capabilities.count)")
     }
 
     func stop() async {
+        RemoteCamLog.info("camera", "stop requested")
         await engine.stop()
         isRunning = false
     }
@@ -71,6 +88,7 @@ final class CameraController: ObservableObject {
             queue: .main
         ) { [weak self] notification in
             let reason = (notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber)?.intValue
+            RemoteCamLog.error("camera", "capture interrupted; reason=\(reason.map(String.init) ?? "unknown")")
             Task { @MainActor in self?.handleInterruption(reasonValue: reason) }
         })
         observers.append(center.addObserver(
@@ -78,6 +96,7 @@ final class CameraController: ObservableObject {
             object: engine.session,
             queue: .main
         ) { [weak self] _ in
+            RemoteCamLog.info("camera", "capture interruption ended")
             Task { @MainActor in self?.interruptionMessage = nil }
         })
         observers.append(center.addObserver(
@@ -86,6 +105,7 @@ final class CameraController: ObservableObject {
             queue: .main
         ) { [weak self] notification in
             let message = (notification.userInfo?[AVCaptureSessionErrorKey] as? Error)?.localizedDescription
+            RemoteCamLog.error("camera", "capture runtime error: \(message ?? "unknown")")
             Task { @MainActor in
                 self?.errorMessage = message
             }

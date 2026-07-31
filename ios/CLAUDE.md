@@ -63,7 +63,7 @@ so raise it rather than editing unilaterally.
 Framing is a 16-byte header, all integers big-endian; channel 2 is reserved for audio
 and must be **ignored, not rejected**, by a v1 receiver.
 
-## Current status — 2026-07-28
+## Current status — 2026-07-30
 
 The Swift 6 project is in `RemoteCam.xcodeproj`. Implemented: Bonjour/manual/recent
 connections, reconnect, bounded framing, deterministic CBOR, multi-lens AVCapture,
@@ -72,10 +72,12 @@ orientation/battery/thermal reporting, PC-driven preview saving, diagnostics,
 multitasking capture setup, and Live Activity.
 
 The simulator suite reports 16 passing tests and one expected VideoToolbox skip. On
-2026-07-28, a signed Debug build made with the beta Xcode/iPhoneOS 27 toolchain was
-installed and launched on a physical iPhone. This verifies signing, installation,
-and startup only. Do not describe capture, encode, background operation, thermals,
-or the Windows end-to-end path as verified until their manual matrices pass.
+2026-07-30, an instrumented signed Debug build was installed on an iPhone 17 Pro Max
+running iOS 27. Startup camera authorization and enumeration completed (nine camera
+descriptors/capability sets), and a manual Wi-Fi connection to a Windows host reached
+`hello` / `server_info` before the expected production pairing gate and peer reset.
+The sanitized sample is in `../docs/testing/log-samples/2026-07-30-ios-device.log`.
+This does not verify capture, encode, background operation, thermals, or live video.
 
 Production pairing, authenticated control/media encryption, and USB remain blocked
 by underspecified shared protocol decisions. Release rejects unauthenticated
