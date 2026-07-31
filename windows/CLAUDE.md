@@ -10,10 +10,11 @@ changing anything in `windows/common/` — more than one component consumes it n
 
 ## Toolchain
 
-Windows 11 build 22000+, MSVC (VS 2022 or newer), CMake ≥ 3.21, Qt 6, Windows SDK
-with `mfvirtualcamera.h` / `mfsensorgroup.lib`. FFmpeg built **without**
-`--enable-gpl`. Optional: NVIDIA Maxine redistributable and an RTX card for the
-Maxine path; the build must succeed and the app must run without either.
+Windows 11 build 22000+, MSVC (VS 2022 or newer), CMake ≥ 3.21 (≥ 3.26 for the
+production preset), Qt 6, and a Windows SDK with `mfvirtualcamera.h` /
+`mfsensorgroup.lib`. FFmpeg is built **without** `--enable-gpl`; OpenSSL 3 is a
+dynamic production dependency. Optional: NVIDIA Maxine redistributable and an RTX
+card for the Maxine path; the build must succeed and the app must run without either.
 
 **x64 only.** The Frame Server is a 64-bit process and will never load a 32-bit
 in-proc server; `windows/CMakeLists.txt` fails at configure time rather than letting
@@ -21,8 +22,9 @@ you produce a camera that registers and then silently never delivers a frame.
 
 Verified working on the dev box: MSVC 19.44 (VS 2022 Build Tools), Windows SDK
 **10.0.26100.0**, CMake 3.26.3, Ninja 1.11.1, dynamic Qt **6.8.3**, NSIS **3.12**,
-and pinned LGPL FFmpeg **8.1.2** through the root `vcpkg.json`. M1 still needs neither
-Qt nor FFmpeg; the app/package and optional decoder do.
+pinned LGPL FFmpeg **8.1.2**, and pinned OpenSSL **3.5.7** through the root
+`vcpkg.json`. M1 still needs none of Qt, FFmpeg, or OpenSSL; the complete app/package
+does.
 
 ```sh
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
@@ -50,43 +52,84 @@ itself.
 
 ## Packaging
 
-`RC_BUILD_INSTALLER=ON` adds CPack + NSIS and produces
-`RemoteCam-<version>-win64.exe`. It needs Qt 6.5+ and NSIS on PATH, and it refuses to
-configure without the Qt app — a package with a camera and nothing to drive it is not
-worth shipping. **Release only**: the debug CRT and debug Qt are not redistributable,
-and both a configure-time and an install-time guard say so.
+`windows-production` is the only shippable configuration. It combines the Qt app,
+dynamic FFmpeg and OpenSSL runtimes, tests, and CPack/NSIS instead of validating each
+piece in a mutually exclusive build. It needs dynamic Qt 6.5+, NSIS, and `VCPKG_ROOT`.
+**Release only**: the debug CRT and debug Qt are not redistributable, and both a
+configure-time and an install-time guard say so.
 
-```sh
-cmake -S . -B build -A x64 -DRC_BUILD_INSTALLER=ON -DCMAKE_PREFIX_PATH=C:/Qt/6.8.2/msvc2022_64
-cmake --build build --config Release
-cpack --config build/CPackConfig.cmake -C Release -B build
+The manifest override and `vcpkg-overlays/openssl/` pin OpenSSL **3.5.7 exactly**.
+The overlay verifies the official release archive and hashes every Windows support
+file borrowed from the pinned vcpkg baseline before it builds; changing either the
+OpenSSL version or the baseline is therefore an explicit release-maintenance task.
+
+```powershell
+$env:VCPKG_ROOT = 'C:\src\vcpkg'
+$env:CMAKE_PREFIX_PATH = 'C:\Qt\6.8.3\msvc2022_64'
+cmake --preset windows-production
+cmake --build --preset windows-production
+ctest --preset windows-production
+cpack --config build-production/CPackConfig.cmake -C Release -B dist
 ```
 
-`cmake --install build --config Release --prefix stage` stages the same payload
-without building the .exe, which is the fast way to check what Qt deployment produced.
-The install layout is deliberately flat — one directory holding `RemoteCam.exe`, the
-Qt runtime, `rc-vcam.dll` and `rc-vcam-register.exe` — because the register tool
-resolves the DLL next to itself and Qt resolves `platforms/` and its QML modules
-relative to the executable.
+Use an **absolute** stage prefix; Qt's deploy script rejects a relative one:
 
-The installer runs `rc-vcam-register.exe --register` on install and `--unregister` on
-uninstall. The NSIS template already declares `RequestExecutionLevel admin`, which is
-what makes that work; the register tool is `asInvoker` and will not self-elevate.
+```powershell
+$stage = Join-Path (Resolve-Path .) 'build-production\stage'
+cmake --install build-production --config Release --prefix $stage
+```
 
-CI is configured to build this on every push to `main` and attach it to a GitHub
-Release on `v*` tags. A hosted runner cannot install a system-wide virtual camera and
-open a real consumer. The v0.1.0 installer has been generated locally, its NSIS
-archive passed an integrity test, and its staged Qt payload passed a startup smoke
-test. An elevated install, camera registration, upgrade/uninstall, and real-consumer
-pass remain human steps; until those run, it is not system-verified.
+The install itself audits the payload: the app, camera components, FFmpeg, OpenSSL,
+licences, Qt, and VC runtime must be present, while every test/fake/probe executable
+must be absent. The layout is deliberately flat because the register tool resolves
+the camera DLL beside itself and the dynamic runtimes must remain replaceable.
+
+The installer and uninstaller request administrator elevation up front. Before any
+file is written, setup rejects non-x64 Windows and builds older than Windows 11 22000.
+That gate also runs before a previous version is removed; upgrades require a successful
+checked uninstall and never overwrite an existing installation in place. Setup does not
+launch `RemoteCam.exe` from its elevated finish page, so the desktop app always starts
+later with the interactive user's normal token.
+Camera registration and the private-network TCP 7890 firewall rule are transactional:
+if either fails, setup runs the just-created uninstaller (with an explicit cleanup
+fallback), preserves the failing exit code, and aborts. If camera cleanup itself fails,
+setup deliberately retains the cleanup binaries and uninstall entry for a safe retry
+instead of claiming success and orphaning the camera. Uninstall first checks that the
+desktop executable and camera DLL are not locked, before it mutates camera, firewall,
+file, or installer state. The generated NSIS delete block then stages the cleanup
+helper and checks that critical payload really disappeared before deleting the
+uninstaller or Add/Remove Programs metadata. Any failure retains that retry path,
+shortcuts, and residual payload. Upgrade and failed-install rollback perform the same
+critical-file check after an invoked uninstaller reports success; for an older
+uninstaller that may already have removed its metadata, the caller promises only to
+retain the remaining directory and in-place `Uninstall.exe`. No path recursively deletes
+a user-selected install directory. Uninstall unregisters the camera, removes the
+firewall rule through the helper's native Firewall COM path, deletes logs, and then
+removes the payload. `VerifyNsisScript.cmake` statically audits those guarantees in CI
+after CPack generates `project.nsi`, and
+CI extracts the generated uninstaller from the final NSIS archive without running
+setup, then `VerifyExecutionLevel.ps1` uses the Windows SDK manifest tool to inspect
+RT_MANIFEST resource 1 in both executables and requires `requireAdministrator`.
+
+CI builds, tests, lints, stages, smoke-starts, audits, and packages this preset on pull
+requests, pushes, and `v*` tags. A tag must exactly match `project(RemoteCam VERSION)`.
+When both `WINDOWS_SIGNING_PFX_BASE64` and `WINDOWS_SIGNING_PFX_PASSWORD` repository
+secrets exist, CI signs and verifies the three project binaries and installer; when
+either is absent, v1 is intentionally allowed to publish unsigned. Every installer
+and release includes `SIGNING-STATUS.txt`, and that status is prepended to the release
+notes so the unsigned case is explicit. CI then publishes the installer, SHA-256
+checksum, SPDX SBOM, provenance attestation, and SBOM attestation. A hosted runner still cannot
+install a system-wide virtual camera and open a real consumer. Elevated install,
+camera registration, upgrade/uninstall, and real-consumer passes remain human release
+steps; until they run, the release is not system-verified.
 
 ## Targets, in build order
 
 | Target | State | What |
 |---|---|---|
 | `windows/common/` | **built** | `rcwin-common` — Win32 helpers, logging, NV12 geometry, the test pattern, the `Global\` frame ring. Plus `rcwin-common-tests`. |
-| `windows/vcam/` | **built** | `rc-vcam.dll` — MF media source COM server. Loaded by the Frame Server in Session 0, **not** by our app. |
-| `windows/register/` | **built** | `rc-vcam-register.exe` — elevated one-shot registration. Install time only. |
+| `windows/vcam/` | **built, automated format tests pass** | `rc-vcam.dll` — MF media source COM server with the fixed six-resolution × 30/60-fps NV12 ladder. Loaded by the Frame Server in Session 0, **not** by our app. |
+| `windows/register/` | **built** | `rc-vcam-register.exe` — elevated one-shot camera registration and native Windows Firewall rule management. Install time only. |
 | `windows/tools/` | **built and tested** | `rc-vcam-probe`, `rc-fakewriter`, explicit opt-in Debug `rc-fakepc`, and non-shipping `rc-fakephone` with stateful scenarios, replay, PCG32 chaos, NDJSON/JUnit, and real-loopback tests. |
 | `windows/net/` | **built and tested** | Bounded dual-stack framed TCP listener, reusable resolving client, one phone at a time, serialized sends, `TCP_NODELAY`, clean stop, and inbox Windows DNS-SD registration. |
 | `windows/backend/` | **built and tested** | Auth-gated session controller, hello/progress/idle timeouts, bounded 8-AU/20-MiB queue, recovery, metrics, observer and encoded-consumer seams. No insecure policy implementation lives in this library. |
@@ -117,6 +160,17 @@ Then, unelevated:
 build\bin\rc-vcam-probe.exe --mf --frames 60
 ```
 
+The MF probe enumerates and requires all 12 native NV12 types. Exercise selected-type
+geometry and pacing explicitly as well; at minimum cover both rates and the largest,
+default, and smallest canvases:
+
+```bash
+build\bin\rc-vcam-probe.exe --mf --format 3840x2160@30 --frames 60
+build\bin\rc-vcam-probe.exe --mf --format 1920x1080@60 --frames 120
+build\bin\rc-vcam-probe.exe --mf --format 640x480@30 --frames 60
+build\bin\rc-vcam-probe.exe --mf --format 640x480@60 --frames 120
+```
+
 ```bash
 build\bin\rc-vcam-probe.exe --directshow --frames 60
 ```
@@ -126,15 +180,19 @@ and look identical in a preview window: the pattern's **static region** must has
 same on every frame (proves stride, plane offsets and colour range are right) and its
 **moving region** must differ on every frame (proves the camera is live rather than
 repeating one frame). Both properties are also covered by `rcwin-common-tests`, so a
-probe failure indicts the camera path rather than the generator.
+probe failure indicts the camera path rather than the generator. It also checks the
+negotiated timestamp interval against 30 or 60 fps; this catches a source that advertises
+one rate while continuing to schedule the old default.
 
 Finally, the actual Session 0 proof: open a consumer, confirm the "WAITING FOR PHONE"
 placeholder, then run `build\bin\rc-fakewriter.exe`. The picture must switch to the
 "SHM WRITER" pattern within ~250 ms and revert when the writer is killed.
 
 **If that last step fails**, the fallbacks in PLAN.md are: a small always-on broker
-service that owns the section, or `MFVirtualCameraAccess_CurrentUser`. Escalate before
-working around it — this decision shapes everything downstream.
+service that owns the section, implemented behind `rcwin::IVirtualCameraBridge`, or
+`MFVirtualCameraAccess_CurrentUser`. `Brokered` currently returns
+`ERROR_NOT_SUPPORTED`; do not add a service before this physical proof fails. Escalate
+before working around it — this decision shapes everything downstream.
 
 `--session` creates a Session-lifetime camera that disappears when the process exits,
 which makes it the right iteration loop after a rebuild. It still needs elevation:

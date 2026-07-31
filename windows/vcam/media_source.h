@@ -31,15 +31,6 @@
 
 namespace rcvcam {
 
-// The one format advertised in M1. The full ladder from PLAN.md §1 lands once the
-// Session 0 handoff is proven -- a single media type removes an entire class of
-// negotiation failure from the first bring-up, and negotiation failures inside the
-// Frame Server are the hardest kind to observe.
-inline constexpr UINT32 kWidth = 1920;
-inline constexpr UINT32 kHeight = 1080;
-inline constexpr UINT32 kFpsNumerator = 30;
-inline constexpr UINT32 kFpsDenominator = 1;
-
 class MediaSource final : public IMFMediaSourceEx,
                           public IMFGetService,
                           public IKsControl,

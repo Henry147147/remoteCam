@@ -1,6 +1,7 @@
 #include "rc/control.h"
 
 #include <algorithm>
+#include <initializer_list>
 #include <utility>
 
 namespace rc::control {
@@ -39,6 +40,14 @@ bool unsignedAt(const cbor::Map& map, const char* key, uint64_t& out) {
   const auto it = map.find(std::string(key));
   if (it == map.end()) return false;
   return it->second.asUnsigned(out);
+}
+
+bool onlyFields(const cbor::Map& map,
+                std::initializer_list<std::string_view> allowed) {
+  return std::all_of(map.begin(), map.end(), [&](const auto& entry) {
+    return std::find(allowed.begin(), allowed.end(),
+                     std::string_view(entry.first)) != allowed.end();
+  });
 }
 
 }  // namespace
@@ -91,6 +100,15 @@ Error Message::decode(const std::vector<uint8_t>& data, Message& out, cbor::Erro
 }
 
 bool Message::text(const char* key, std::string& out) const { return textAt(fields, key, out); }
+
+bool Message::bytes(const char* key, std::vector<uint8_t>& out) const {
+  const auto it = fields.find(std::string(key));
+  if (it == fields.end()) return false;
+  const std::vector<uint8_t>* value = nullptr;
+  if (!it->second.asBytes(value)) return false;
+  out = *value;
+  return true;
+}
 
 bool Message::unsignedInt(const char* key, uint64_t& out) const {
   return unsignedAt(fields, key, out);
@@ -171,6 +189,12 @@ Message setFormat(const StreamConfig& config) {
   return message;
 }
 
+Message setFormat(const StreamConfig& config, uint64_t generation) {
+  Message message = setFormat(config);
+  put(message.fields, "generation", cbor::Value::unsignedInt(generation));
+  return message;
+}
+
 Message setCamera(const std::string& lens, const std::optional<std::string>& position) {
   Message message = makeMessage("set_camera");
   put(message.fields, "lens", cbor::Value::text(lens));
@@ -185,6 +209,26 @@ Message requestKeyframe() { return makeMessage("request_keyframe"); }
 Message setPreview(bool enabled) {
   Message message = makeMessage("set_preview");
   put(message.fields, "enabled", cbor::Value::boolean(enabled));
+  return message;
+}
+
+Message authChallenge(const AuthChallenge& value) {
+  Message message = makeMessage("auth_challenge");
+  put(message.fields, "server_nonce",
+      cbor::Value::bytes(std::vector<uint8_t>(value.serverNonce.begin(),
+                                               value.serverNonce.end())));
+  put(message.fields, "expires",
+      cbor::Value::unsignedInt(value.expiresUnixSeconds));
+  return message;
+}
+
+Message authConfirm(const AuthConfirm& value) {
+  Message message = makeMessage("auth_confirm");
+  put(message.fields, "server_proof",
+      cbor::Value::bytes(std::vector<uint8_t>(value.serverProof.begin(),
+                                               value.serverProof.end())));
+  put(message.fields, "session_expires",
+      cbor::Value::unsignedInt(value.sessionExpiresUnixSeconds));
   return message;
 }
 
@@ -246,33 +290,102 @@ Message hello(const std::string& deviceName, const std::string& deviceId,
 
 Message streamStart() { return makeMessage("stream_start"); }
 
-bool parseHello(const Message& message, Hello& out) {
-  if (message.type != "hello") return false;
-  // `v` and `device_id` are the two fields the PC cannot proceed without: one decides
-  // whether we speak the same protocol, the other is how the pairing record is keyed.
-  if (!message.unsignedInt("v", out.version)) return false;
-  if (!message.text("device_id", out.deviceId)) return false;
+Message authResponse(const AuthResponse& value) {
+  Message message = makeMessage("auth_response");
+  put(message.fields, "client_nonce",
+      cbor::Value::bytes(std::vector<uint8_t>(value.clientNonce.begin(),
+                                               value.clientNonce.end())));
+  put(message.fields, "client_proof",
+      cbor::Value::bytes(std::vector<uint8_t>(value.clientProof.begin(),
+                                               value.clientProof.end())));
+  return message;
+}
 
-  message.text("device_name", out.deviceName);
-  message.text("platform", out.platform);
-  message.text("model", out.model);
+bool parseAuthResponse(const Message& message, AuthResponse& out) {
+  if (message.type != "auth_response" ||
+      !onlyFields(message.fields, {"client_nonce", "client_proof"})) {
+    return false;
+  }
+  std::vector<uint8_t> nonce;
+  std::vector<uint8_t> proof;
+  if (!message.bytes("client_nonce", nonce) || nonce.size() != out.clientNonce.size() ||
+      !message.bytes("client_proof", proof) || proof.size() != out.clientProof.size()) {
+    return false;
+  }
+  std::copy(nonce.begin(), nonce.end(), out.clientNonce.begin());
+  std::copy(proof.begin(), proof.end(), out.clientProof.begin());
+  return true;
+}
+
+Message formatAck(uint64_t generation) {
+  Message message = makeMessage("format_ack");
+  put(message.fields, "generation", cbor::Value::unsignedInt(generation));
+  return message;
+}
+
+bool parseFormatAck(const Message& message, uint64_t& generation) {
+  return message.type == "format_ack" && onlyFields(message.fields, {"generation"}) &&
+         message.unsignedInt("generation", generation) &&
+         generation != 0;
+}
+
+Message formatReject(const FormatReject& value) {
+  Message message = makeMessage("format_reject");
+  put(message.fields, "generation", cbor::Value::unsignedInt(value.generation));
+  put(message.fields, "code", cbor::Value::text(value.code));
+  put(message.fields, "message", cbor::Value::text(value.message));
+  return message;
+}
+
+bool parseFormatReject(const Message& message, FormatReject& out) {
+  if (message.type != "format_reject" ||
+      !onlyFields(message.fields, {"generation", "code", "message"}) ||
+      !message.unsignedInt("generation", out.generation) || out.generation == 0 ||
+      !message.text("code", out.code) || out.code.empty() || out.code.size() > 128 ||
+      !message.text("message", out.message) || out.message.empty() ||
+      out.message.size() > 1024) {
+    return false;
+  }
+  return true;
+}
+
+bool validDeviceId(std::string_view value) {
+  if (value.size() != 16) return false;
+  return std::all_of(value.begin(), value.end(), [](char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+  });
+}
+
+bool parseHello(const Message& message, Hello& out) {
+  if (message.type != "hello" ||
+      !onlyFields(message.fields,
+                  {"v", "device_name", "device_id", "platform", "model", "caps"})) {
+    return false;
+  }
+  if (!message.unsignedInt("v", out.version) ||
+      !message.text("device_id", out.deviceId) || !validDeviceId(out.deviceId) ||
+      !message.text("device_name", out.deviceName) || out.deviceName.empty() ||
+      !message.text("platform", out.platform) || out.platform.empty() ||
+      !message.text("model", out.model) || out.model.empty()) {
+    return false;
+  }
 
   out.caps.clear();
   const auto capsIt = message.fields.find(std::string("caps"));
-  if (capsIt != message.fields.end()) {
-    const cbor::Array* list = nullptr;
-    if (capsIt->second.asArray(list)) {
-      for (const cbor::Value& item : *list) {
-        const std::string* text = nullptr;
-        if (item.asText(text)) out.caps.push_back(*text);
-      }
-    }
+  if (capsIt == message.fields.end()) return false;
+  const cbor::Array* list = nullptr;
+  if (!capsIt->second.asArray(list)) return false;
+  for (const cbor::Value& item : *list) {
+    const std::string* text = nullptr;
+    if (!item.asText(text)) return false;
+    out.caps.push_back(*text);
   }
   return true;
 }
 
 bool parseOrientation(const Message& message, Orientation& out) {
-  if (message.type != "orientation") return false;
+  if (message.type != "orientation" ||
+      !onlyFields(message.fields, {"deg", "locked"})) return false;
   if (!message.number("deg", out.degrees)) return false;
   if (!message.boolean("locked", out.locked)) out.locked = false;
   return true;
@@ -286,7 +399,7 @@ Message orientation(const Orientation& value) {
 }
 
 bool parseThermal(const Message& message, Thermal& out) {
-  if (message.type != "thermal") return false;
+  if (message.type != "thermal" || !onlyFields(message.fields, {"state"})) return false;
   return message.text("state", out.state);
 }
 
@@ -297,7 +410,8 @@ Message thermal(const Thermal& value) {
 }
 
 bool parseBattery(const Message& message, Battery& out) {
-  if (message.type != "battery") return false;
+  if (message.type != "battery" ||
+      !onlyFields(message.fields, {"level", "charging"})) return false;
   if (!message.number("level", out.level)) return false;
   if (!message.boolean("charging", out.charging)) out.charging = false;
   return true;
@@ -311,7 +425,13 @@ Message battery(const Battery& value) {
 }
 
 bool parseCameraState(const Message& message, CameraState& out) {
-  if (message.type != "camera_state") return false;
+  if (message.type != "camera_state" ||
+      !onlyFields(message.fields,
+                  {"device_id", "position", "lens", "zoom", "focus_mode", "focus",
+                   "exposure_mode", "iso", "exposure", "ev", "wb_mode", "wb",
+                   "torch", "stabilization"})) {
+    return false;
+  }
 
   const auto deviceIt = message.fields.find(std::string("device_id"));
   if (deviceIt != message.fields.end()) {
@@ -363,7 +483,8 @@ Message cameraState(const CameraState& value) {
 }
 
 bool parseError(const Message& message, DeviceError& out) {
-  if (message.type != "error") return false;
+  if (message.type != "error" ||
+      !onlyFields(message.fields, {"code", "message"})) return false;
   return message.text("code", out.code) && message.text("message", out.message);
 }
 
@@ -393,61 +514,62 @@ bool Caps::preferredCodec(Codec& out) const {
 }
 
 bool parseCaps(const Message& message, Caps& out) {
-  if (message.type != "caps") return false;
+  if (message.type != "caps" ||
+      !onlyFields(message.fields, {"cameras", "codecs"})) return false;
 
   out.cameras.clear();
   out.codecs.clear();
 
   const auto camerasIt = message.fields.find(std::string("cameras"));
-  if (camerasIt != message.fields.end()) {
-    const cbor::Array* cameras = nullptr;
-    if (camerasIt->second.asArray(cameras)) {
-      for (const cbor::Value& entry : *cameras) {
+  if (camerasIt == message.fields.end()) return false;
+  const cbor::Array* cameras = nullptr;
+  if (!camerasIt->second.asArray(cameras)) return false;
+  for (const cbor::Value& entry : *cameras) {
         const cbor::Map* camera = nullptr;
-        if (!entry.asMap(camera)) continue;
+        if (!entry.asMap(camera) ||
+            !onlyFields(*camera, {"id", "name", "position", "lens", "formats"})) {
+          return false;
+        }
 
         CameraDescriptor descriptor;
         // A camera without an id cannot be selected later, so it is not worth keeping.
-        if (!textAt(*camera, "id", descriptor.id)) continue;
-        textAt(*camera, "name", descriptor.name);
-        textAt(*camera, "position", descriptor.position);
-        textAt(*camera, "lens", descriptor.lens);
+        if (!textAt(*camera, "id", descriptor.id) || descriptor.id.empty() ||
+            !textAt(*camera, "name", descriptor.name) ||
+            !textAt(*camera, "position", descriptor.position) ||
+            !textAt(*camera, "lens", descriptor.lens)) return false;
 
         const auto formatsIt = camera->find(std::string("formats"));
-        if (formatsIt != camera->end()) {
-          const cbor::Array* formats = nullptr;
-          if (formatsIt->second.asArray(formats)) {
+        if (formatsIt == camera->end()) return false;
+        const cbor::Array* formats = nullptr;
+        if (!formatsIt->second.asArray(formats)) return false;
             for (const cbor::Value& formatEntry : *formats) {
               const cbor::Map* format = nullptr;
-              if (!formatEntry.asMap(format)) continue;
+              if (!formatEntry.asMap(format) ||
+                  !onlyFields(*format, {"width", "height", "fps"})) return false;
               uint64_t width = 0, height = 0, fps = 0;
-              if (!unsignedAt(*format, "width", width)) continue;
-              if (!unsignedAt(*format, "height", height)) continue;
-              if (!unsignedAt(*format, "fps", fps)) continue;
+              if (!unsignedAt(*format, "width", width) ||
+                  !unsignedAt(*format, "height", height) ||
+                  !unsignedAt(*format, "fps", fps)) return false;
               // Anything that cannot fit the ring is not a format we can accept, and
               // silently keeping it would surface later as a dropped frame.
-              if (width > 4096 || height > 4096 || fps > 120) continue;
+              if (width == 0 || height == 0 || fps == 0 ||
+                  width > 4096 || height > 4096 || fps > 120) return false;
               descriptor.formats.push_back(CaptureFormat{static_cast<uint32_t>(width),
                                                          static_cast<uint32_t>(height),
                                                          static_cast<uint32_t>(fps)});
             }
-          }
-        }
         out.cameras.push_back(std::move(descriptor));
-      }
-    }
   }
 
   const auto codecsIt = message.fields.find(std::string("codecs"));
-  if (codecsIt != message.fields.end()) {
-    const cbor::Array* codecs = nullptr;
-    if (codecsIt->second.asArray(codecs)) {
+  if (codecsIt == message.fields.end()) return false;
+  const cbor::Array* codecs = nullptr;
+  if (!codecsIt->second.asArray(codecs)) return false;
       for (const cbor::Value& item : *codecs) {
         const std::string* text = nullptr;
-        if (item.asText(text)) out.codecs.push_back(*text);
+        if (!item.asText(text) || (*text != "h264" && *text != "hevc")) return false;
+        out.codecs.push_back(*text);
       }
-    }
-  }
   return true;
 }
 

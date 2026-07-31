@@ -189,11 +189,15 @@ void testIntegers() {
   checkError(rc::cbor::decode({0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, decoded),
              rc::cbor::Error::IntegerOverflow, "an out-of-range negative is refused");
 
-  // Non-shortest heads are accepted on decode, matching Swift. Re-encoding normalises
-  // them, which is exactly why decode-then-encode is not byte-preserving.
-  checkError(rc::cbor::decode({0x18, 0x01}, decoded), rc::cbor::Error::None,
-             "a non-shortest head is accepted");
-  checkBytes(rc::cbor::encode(decoded), {0x01}, "re-encoding normalises it");
+  checkError(rc::cbor::decode({0x18, 0x01}, decoded),
+             rc::cbor::Error::NonMinimalInteger,
+             "a non-shortest one-byte head is rejected");
+  checkError(rc::cbor::decode({0x19, 0x00, 0xff}, decoded),
+             rc::cbor::Error::NonMinimalInteger,
+             "a non-shortest two-byte head is rejected");
+  checkError(rc::cbor::decode({0x1a, 0x00, 0x00, 0xff, 0xff}, decoded),
+             rc::cbor::Error::NonMinimalInteger,
+             "a non-shortest four-byte head is rejected");
 }
 
 void testStringsAndUtf8() {

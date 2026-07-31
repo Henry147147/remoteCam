@@ -17,6 +17,8 @@ TransformConstants packTransformConstants(const rc::TransformParams& params) {
   if (params.srcWidth > 0 && params.srcHeight > 0) {
     constants.inverseSourceSize[0] = 1.0f / static_cast<float>(params.srcWidth);
     constants.inverseSourceSize[1] = 1.0f / static_cast<float>(params.srcHeight);
+    constants.inverseSourceSize[2] = static_cast<float>(params.srcWidth);
+    constants.inverseSourceSize[3] = static_cast<float>(params.srcHeight);
   }
   return constants;
 }

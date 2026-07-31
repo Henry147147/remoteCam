@@ -44,6 +44,10 @@ float4 main(float4 position : SV_Position) : SV_Target {
   const float divisor = dot(row2.xyz, destination);
   const float2 sourcePixels =
       float2(dot(row0.xyz, destination), dot(row1.xyz, destination)) / divisor;
+  if (sourcePixels.x < 0.0 || sourcePixels.y < 0.0 ||
+      sourcePixels.x >= inverseSourceSize.z || sourcePixels.y >= inverseSourceSize.w) {
+    return float4(0.0, 0.0, 0.0, 1.0);
+  }
   const float2 uv = sourcePixels * inverseSourceSize.xy;
 
   // VideoToolbox's NV12 is video-range Rec.709. Sampling the two planes directly

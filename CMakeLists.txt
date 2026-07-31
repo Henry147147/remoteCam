@@ -1,6 +1,37 @@
 cmake_minimum_required(VERSION 3.21)
 project(RemoteCam VERSION 0.1.0 LANGUAGES CXX)
 
+# Keep one machine-readable version beside CMakeCache.txt. Release automation reads
+# this instead of duplicating the version in workflow YAML or release notes.
+set(RC_WINDOWS_SIGNING_STATUS "unsigned" CACHE STRING
+    "Informational status embedded in Windows packages: signed or unsigned")
+set_property(CACHE RC_WINDOWS_SIGNING_STATUS PROPERTY STRINGS signed unsigned)
+if(NOT RC_WINDOWS_SIGNING_STATUS MATCHES "^(signed|unsigned)$")
+    message(FATAL_ERROR "RC_WINDOWS_SIGNING_STATUS must be signed or unsigned")
+endif()
+if(RC_WINDOWS_SIGNING_STATUS STREQUAL "signed")
+    set(RC_WINDOWS_SIGNING_DETAIL
+        "Authenticode signatures with RFC 3161 timestamps are required and verified by CI.")
+else()
+    set(RC_WINDOWS_SIGNING_DETAIL
+        "No Authenticode signature was applied. Windows may show an unknown-publisher warning.")
+endif()
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RemoteCamVersion.txt.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/RemoteCamVersion.txt"
+    @ONLY)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RemoteCamSigningStatus.txt.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/SIGNING-STATUS.txt"
+    @ONLY)
+
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg.json" _rc_vcpkg_manifest)
+string(JSON _rc_vcpkg_version GET "${_rc_vcpkg_manifest}" version-string)
+if(NOT _rc_vcpkg_version STREQUAL PROJECT_VERSION)
+    message(FATAL_ERROR
+        "project() version ${PROJECT_VERSION} and vcpkg version ${_rc_vcpkg_version} differ")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -43,6 +74,7 @@ add_subdirectory(core)
 # Windows client, virtual camera, OBS plugin and installer. Guarded because the
 # project is developed on Linux and built for Windows in CI.
 if(WIN32)
+    enable_language(RC)
     add_subdirectory(windows)
 endif()
 

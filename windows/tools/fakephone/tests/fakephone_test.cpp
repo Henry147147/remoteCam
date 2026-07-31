@@ -106,7 +106,7 @@ class Harness final : public rcnet::SessionHandler {
     sendControl(connection, rc::control::setControl(controls));
     rc::control::StreamConfig format = rc::control::conservativeDefault();
     format.bitrate = 5000000;
-    sendControl(connection, rc::control::setFormat(format));
+    sendControl(connection, rc::control::setFormat(format, 1));
     rc::control::Stats stats;
     stats.targetBitrate = 3000000;
     sendControl(connection, rc::control::stats(stats), rc::wire::Channel::Stats);
@@ -138,6 +138,17 @@ void testPhoneModel() {
       model.apply(rc::control::ready(rc::control::conservativeDefault()));
   check(ready.accepted && ready.becameReady && model.state() == rcfakephone::SessionState::Ready,
         "valid ready advances the phone state");
+
+  rc::control::StreamConfig changed = rc::control::conservativeDefault();
+  changed.bitrate = 5'000'000;
+  const rcfakephone::ControlEffects format =
+      model.apply(rc::control::setFormat(changed, 7));
+  check(format.accepted && format.formatChanged && format.formatGeneration == 7 &&
+            model.streamConfig().bitrate == changed.bitrate,
+        "live format retains the generation that must be acknowledged");
+  const rcfakephone::ControlEffects replayed =
+      model.apply(rc::control::setFormat(changed, 7));
+  check(!replayed.accepted, "duplicate live format generations are rejected");
 
   rcfakephone::PhoneProfile constrained = rcfakephone::constrainedProfile();
   check(constrained.capabilities.codecs.size() == 1 &&

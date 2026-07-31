@@ -16,10 +16,8 @@
 //    so determinism is structural and cannot be forgotten at a call site.
 //
 // 2. Encoding emits binary64 for every double; decoding also accepts binary16 and
-//    binary32. Encoding emits shortest-form heads; decoding also accepts non-shortest.
-//    So decode-then-encode is NOT byte-preserving. That matters: a future
-//    MAC-over-canonical-bytes scheme cannot be built on "re-encode and compare" until
-//    both sides agree to reject non-canonical input, and neither does today.
+//    binary32. Integer and length heads must use their shortest form on both sides;
+//    this removes alternate authenticated encodings for the same v1 value.
 //
 // 3. Everything is bounded, because this parses bytes from the network before anything
 //    has authenticated them. Depth, element counts and total size are all capped, and
@@ -45,6 +43,7 @@ enum class Error {
   None = 0,
   Truncated,
   InvalidAdditionalInformation,
+  NonMinimalInteger,
   InvalidUtf8,
   UnsupportedMapKey,
   UnsupportedSimpleValue,

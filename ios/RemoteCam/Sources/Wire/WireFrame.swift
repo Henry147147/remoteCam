@@ -39,6 +39,10 @@ struct WireFrame: Equatable, Sendable {
     func encoded() throws -> Data {
         guard payload.count <= Self.maximumPayloadLength else { throw WireFrameError.payloadTooLarge }
         guard flags.rawValue & ~WireFlags.knownMask == 0 else { throw WireFrameError.reservedFlagsSet }
+        guard !flags.contains(.endOfFragment) else { throw WireFrameError.fragmentationUnsupported }
+        guard !flags.contains(.keyframe) || channel == WireChannel.video.rawValue else {
+            throw WireFrameError.invalidChannelFlags
+        }
 
         var data = Data(capacity: Self.headerLength + payload.count)
         data.appendBigEndian(UInt32(payload.count))
@@ -55,6 +59,8 @@ enum WireFrameError: Error, Equatable {
     case payloadTooLarge
     case reservedFlagsSet
     case reservedHeaderNonZero
+    case fragmentationUnsupported
+    case invalidChannelFlags
 }
 
 struct WireFrameDecoder: Sendable {
@@ -70,6 +76,10 @@ struct WireFrameDecoder: Sendable {
             guard payloadLength <= WireFrame.maximumPayloadLength else { throw WireFrameError.payloadTooLarge }
             let flags = WireFlags(rawValue: buffer[readOffset + 5])
             guard flags.rawValue & ~WireFlags.knownMask == 0 else { throw WireFrameError.reservedFlagsSet }
+            guard !flags.contains(.endOfFragment) else { throw WireFrameError.fragmentationUnsupported }
+            guard !flags.contains(.keyframe) || buffer[readOffset + 4] == WireChannel.video.rawValue else {
+                throw WireFrameError.invalidChannelFlags
+            }
             guard buffer[readOffset + 6] == 0, buffer[readOffset + 7] == 0 else { throw WireFrameError.reservedHeaderNonZero }
 
             let messageLength = WireFrame.headerLength + payloadLength

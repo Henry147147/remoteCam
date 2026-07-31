@@ -1,0 +1,22 @@
+{
+  "name": "openssl",
+  "version": "3.5.7",
+  "description": "OpenSSL 3.5.7 LTS, pinned for RemoteCam production authentication",
+  "homepage": "https://www.openssl.org",
+  "license": "Apache-2.0",
+  "supports": "windows & x64 & !uwp",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-get-vars",
+      "host": true
+    }
+  ]
+}

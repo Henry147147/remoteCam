@@ -1,4 +1,5 @@
 #include "rcplatform/abr_controller.h"
+#include "rcplatform/pixel_convert.h"
 #include "rcplatform/shader_constants.h"
 #include "rcplatform/video_pipeline.h"
 
@@ -108,6 +109,47 @@ void testShaderPackingIsExact() {
   }
   checkNear(packed.inverseSourceSize[0], 1.0f / 1280.0f, 0.0f, "inverse source width");
   checkNear(packed.inverseSourceSize[1], 1.0f / 720.0f, 0.0f, "inverse source height");
+  checkNear(packed.inverseSourceSize[2], 1280.0f, 0.0f, "source width for matte bounds");
+  checkNear(packed.inverseSourceSize[3], 720.0f, 0.0f, "source height for matte bounds");
+}
+
+void testBgraToNv12() {
+  std::printf("BGRA to studio-range Rec.709 NV12\n");
+  constexpr uint32_t width = 4;
+  constexpr uint32_t height = 2;
+  std::vector<uint8_t> bgra(width * height * 4u, 0);
+  std::vector<uint8_t> nv12(width * height * 3u / 2u, 0xff);
+
+  check(rcplatform::bgraToNv12(bgra.data(), bgra.size(), width * 4u, width, height,
+                               nv12.data(), nv12.size(), width) == S_OK,
+        "black frame converts");
+  for (uint32_t index = 0; index < width * height; ++index) {
+    check(nv12[index] == 16, "black luma is video-range black");
+  }
+  for (size_t index = width * height; index < nv12.size(); ++index) {
+    check(nv12[index] == 128, "neutral black chroma is centred");
+  }
+
+  for (size_t index = 0; index < bgra.size(); index += 4u) {
+    bgra[index + 0u] = 255;
+    bgra[index + 1u] = 255;
+    bgra[index + 2u] = 255;
+    bgra[index + 3u] = 255;
+  }
+  check(rcplatform::bgraToNv12(bgra.data(), bgra.size(), width * 4u, width, height,
+                               nv12.data(), nv12.size(), width) == S_OK,
+        "white frame converts");
+  check(nv12[0] == 235, "white luma is video-range white");
+  check(nv12[width * height] == 128 && nv12[width * height + 1u] == 128,
+        "white chroma remains neutral");
+
+  check(rcplatform::bgraToNv12(bgra.data(), bgra.size(), width * 4u, 3, height,
+                               nv12.data(), nv12.size(), width) == E_INVALIDARG,
+        "odd output width is rejected");
+  check(rcplatform::bgraToNv12(bgra.data(), bgra.size() - 1u, width * 4u, width, height,
+                               nv12.data(), nv12.size(), width) ==
+            HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER),
+        "short mapped input is rejected");
 }
 
 class RecordingDecoder final : public rcplatform::IVideoDecoder {
@@ -220,6 +262,7 @@ void testPipelineValidationOrderAndPts() {
 int main() {
   testAbrBackoffAndRecovery();
   testShaderPackingIsExact();
+  testBgraToNv12();
   testPipelineValidationOrderAndPts();
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

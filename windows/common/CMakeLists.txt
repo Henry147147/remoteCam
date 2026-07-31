@@ -18,6 +18,7 @@ set(RCWIN_COMMON_SOURCES
     src/nv12.cpp
     src/shm_ring.cpp
     src/test_pattern.cpp
+    src/virtual_camera_bridge.cpp
 )
 
 foreach(rcwin_variant IN ITEMS rcwin-common rcwin-common-mt)

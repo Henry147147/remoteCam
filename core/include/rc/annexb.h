@@ -56,7 +56,12 @@ struct AccessUnitReport {
   bool isAnnexB = false;
   int nalCount = 0;
   bool hasParameterSets = false;   // H.264: SPS and PPS. HEVC: VPS, SPS and PPS.
+  bool hasVideoSlice = false;
   bool hasKeyframeSlice = false;
+  // True only when the complete parameter-set family appears before the first
+  // random-access slice. Sets appended after a slice cannot initialise a decoder in
+  // time for that slice and therefore do not make the access unit self-contained.
+  bool isSelfContainedKeyframe = false;
   // The property protocol.md actually requires. False for a keyframe whose parameter
   // sets are missing, true for a non-keyframe regardless.
   bool decodableFromHere = false;

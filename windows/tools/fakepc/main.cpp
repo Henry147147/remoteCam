@@ -123,6 +123,8 @@ class FakeSession final : public rcnet::SessionHandler {
   }
 
   void onConnected(rcnet::Connection& connection) override {
+    nextFormatGeneration_ = 1;
+    pendingFormatGeneration_ = 0;
     std::printf("phone connected from %s; waiting for hello\n", connection.peer().c_str());
   }
 
@@ -178,6 +180,27 @@ class FakeSession final : public rcnet::SessionHandler {
       std::printf("  camera lens=%s zoom=%.2f\n", lens.c_str(), zoom);
     } else if (message.type == "stream_start") {
       std::printf("  stream started; access units -> %ls\n", outputPath_.c_str());
+    } else if (message.type == "format_ack") {
+      uint64_t generation = 0;
+      if (rc::control::parseFormatAck(message, generation) &&
+          generation == pendingFormatGeneration_) {
+        pendingFormatGeneration_ = 0;
+        sendControl(connection, rc::control::requestKeyframe());
+        std::printf("  format generation %llu active; requested recovery keyframe\n",
+                    static_cast<unsigned long long>(generation));
+      } else {
+        std::printf("  unexpected format acknowledgement\n");
+      }
+    } else if (message.type == "format_reject") {
+      rc::control::FormatReject rejected;
+      if (rc::control::parseFormatReject(message, rejected) &&
+          rejected.generation == pendingFormatGeneration_) {
+        pendingFormatGeneration_ = 0;
+        sendControl(connection, rc::control::requestKeyframe());
+        std::printf("  format generation %llu rejected (%s): %s\n",
+                    static_cast<unsigned long long>(rejected.generation),
+                    rejected.code.c_str(), rejected.message.c_str());
+      }
     } else if (message.type == "error") {
       rc::control::DeviceError value;
       rc::control::parseError(message, value);
@@ -249,12 +272,12 @@ class FakeSession final : public rcnet::SessionHandler {
     sendControl(connection, rc::control::setControl(controls));
 
     const rc::control::StreamConfig config = rc::control::conservativeDefault();
-    sendControl(connection, rc::control::setFormat(config));
+    pendingFormatGeneration_ = nextFormatGeneration_++;
+    sendControl(connection, rc::control::setFormat(config, pendingFormatGeneration_));
     rc::control::Stats stats;
     stats.targetBitrate = config.bitrate;
     sendControl(connection, rc::control::stats(stats),
                 static_cast<uint8_t>(rc::wire::Channel::Stats));
-    sendControl(connection, rc::control::requestKeyframe());
   }
 
   void handleVideo(const rc::wire::Frame& frame) {
@@ -296,6 +319,8 @@ class FakeSession final : public rcnet::SessionHandler {
   std::FILE* output_ = nullptr;
   rc::annexb::Codec codec_ = rc::annexb::Codec::H264;
   uint64_t videoFrames_ = 0;
+  uint64_t nextFormatGeneration_ = 1;
+  uint64_t pendingFormatGeneration_ = 0;
 };
 
 }  // namespace

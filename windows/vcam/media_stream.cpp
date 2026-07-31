@@ -8,17 +8,10 @@
 
 #include "rcwin/hr.h"
 #include "rcwin/nv12.h"
-#include "media_source.h"
 
 using Microsoft::WRL::ComPtr;
 
 namespace rcvcam {
-namespace {
-
-// Frame duration in 100 ns units, the unit Media Foundation uses everywhere.
-constexpr LONGLONG kFrameDuration = 10000000LL * kFpsDenominator / kFpsNumerator;
-
-}  // namespace
 
 HRESULT MediaStream::Create(IMFMediaSource* source, IMFStreamDescriptor* descriptor,
                             IMFAttributes* attributes, MediaStream** out) {
@@ -170,7 +163,7 @@ IFACEMETHODIMP MediaStream::RequestSample(IUnknown* token) {
       requestOverflowLogged_ = true;
       RC_WARN(L"consumer is requesting samples faster than %u/%u fps; capping the pending "
               L"queue at %zu and dropping the oldest",
-              kFpsNumerator, kFpsDenominator, kMaxPendingRequests);
+              format_.fpsNumerator, format_.fpsDenominator, kMaxPendingRequests);
     }
   }
 
@@ -204,12 +197,39 @@ IFACEMETHODIMP MediaStream::GetStreamState(MF_STREAM_STATE* state) {
 
 // --- lifecycle --------------------------------------------------------------
 
+HRESULT MediaStream::Configure(const VideoFormat& format, IMFMediaType* mediaType) {
+  RC_RETURN_IF_NULL(mediaType);
+  VideoFormat parsed;
+  RC_RETURN_IF_FAILED(videoFormatFromMediaType(mediaType, parsed));
+  RC_RETURN_HR_IF(parsed != format, MF_E_INVALIDMEDIATYPE);
+
+  std::lock_guard<std::mutex> lifecycleLock(lifecycleMutex_);
+  ComPtr<IMFStreamDescriptor> descriptor;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    RC_RETURN_HR_IF(shutdown_, MF_E_SHUTDOWN);
+    RC_RETURN_HR_IF(running_ && format_ != format, MF_E_INVALIDREQUEST);
+    descriptor = descriptor_;
+  }
+
+  ComPtr<IMFMediaTypeHandler> handler;
+  RC_RETURN_IF_FAILED(descriptor->GetMediaTypeHandler(&handler));
+  RC_RETURN_IF_FAILED(handler->SetCurrentMediaType(mediaType));
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  RC_RETURN_HR_IF(shutdown_, MF_E_SHUTDOWN);
+  format_ = format;
+  return S_OK;
+}
+
 HRESULT MediaStream::Start() {
   std::lock_guard<std::mutex> lifecycleLock(lifecycleMutex_);
+  VideoFormat format;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     RC_RETURN_HR_IF(shutdown_, MF_E_SHUTDOWN);
     if (running_) return S_OK;
+    format = format_;
     tokens_.clear();
     requestOverflowLogged_ = false;  // warn once per streaming session, not once ever
     sampleFailureLogged_ = false;
@@ -235,7 +255,8 @@ HRESULT MediaStream::Start() {
     RC_ERR(L"could not start frame thread: %hs", error.what());
     return HRESULT_FROM_WIN32(ERROR_NOT_ENOUGH_MEMORY);
   }
-  RC_LOG(L"stream started (%ux%u @ %u/%u)", kWidth, kHeight, kFpsNumerator, kFpsDenominator);
+  RC_LOG(L"stream started (%ux%u @ %u/%u)", format.width, format.height,
+         format.fpsNumerator, format.fpsDenominator);
   return S_OK;
 }
 
@@ -282,14 +303,15 @@ HRESULT MediaStream::Shutdown() {
 
 // --- sample production ------------------------------------------------------
 
-HRESULT MediaStream::ProduceSample(uint64_t frameIndex, LONGLONG timestamp,
-                                   IMFSample** out) {
+HRESULT MediaStream::ProduceSample(const VideoFormat& format, uint64_t frameIndex,
+                                   LONGLONG timestamp, IMFSample** out) {
   RC_RETURN_IF_NULL(out);
   *out = nullptr;
 
   ComPtr<IMFMediaBuffer> buffer;
-  RC_RETURN_IF_FAILED(::MFCreate2DMediaBuffer(kWidth, kHeight, MFVideoFormat_NV12.Data1,
-                                              FALSE, &buffer));
+  RC_RETURN_IF_FAILED(::MFCreate2DMediaBuffer(format.width, format.height,
+                                               MFVideoFormat_NV12.Data1, FALSE,
+                                               &buffer));
 
   ComPtr<IMF2DBuffer2> buffer2d;
   RC_RETURN_IF_FAILED(buffer.As(&buffer2d));
@@ -311,7 +333,7 @@ HRESULT MediaStream::ProduceSample(uint64_t frameIndex, LONGLONG timestamp,
   }
 
   const rcwin::Nv12Layout layout =
-      rcwin::nv12Layout(static_cast<int>(kWidth), static_cast<int>(kHeight),
+      rcwin::nv12Layout(static_cast<int>(format.width), static_cast<int>(format.height),
                         static_cast<int>(pitch));
   const uintptr_t startAddress = reinterpret_cast<uintptr_t>(bufferStart);
   const uintptr_t scanlineAddress = reinterpret_cast<uintptr_t>(scanline0);
@@ -334,13 +356,20 @@ HRESULT MediaStream::ProduceSample(uint64_t frameIndex, LONGLONG timestamp,
   RC_RETURN_IF_FAILED(::MFCreateSample(&sample));
   RC_RETURN_IF_FAILED(sample->AddBuffer(buffer.Get()));
   RC_RETURN_IF_FAILED(sample->SetSampleTime(timestamp));
-  RC_RETURN_IF_FAILED(sample->SetSampleDuration(kFrameDuration));
+  RC_RETURN_IF_FAILED(sample->SetSampleDuration(frameDuration100ns(format)));
 
   return sample.CopyTo(out);
 }
 
 void MediaStream::ThreadMain() {
   ::SetThreadDescription(::GetCurrentThread(), L"rc-vcam frames");
+
+  VideoFormat format;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    format = format_;
+  }
+  const LONGLONG frameDuration = frameDuration100ns(format);
 
   // High-resolution timers are the difference between honest 30 fps and the ~15 ms
   // granularity of the default timer, which would make every frame interval a coin
@@ -366,7 +395,8 @@ void MediaStream::ThreadMain() {
     // Scheduled against an absolute origin rather than by sleeping a fixed interval,
     // so a late wake-up does not push every subsequent frame later. Over an hour a
     // relative sleep would drift by minutes.
-    const LONGLONG target = startTime + static_cast<LONGLONG>(frameIndex + 1) * kFrameDuration;
+    const LONGLONG target =
+        startTime + static_cast<LONGLONG>(frameIndex + 1) * frameDuration;
     LONGLONG delta = target - ::MFGetSystemTime();
     if (delta < 0) delta = 0;
 
@@ -401,7 +431,8 @@ void MediaStream::ThreadMain() {
     if (!haveRequest) continue;
 
     ComPtr<IMFSample> sample;
-    const HRESULT sampleHr = ProduceSample(frameIndex, ::MFGetSystemTime(), &sample);
+    const HRESULT sampleHr =
+        ProduceSample(format, frameIndex, ::MFGetSystemTime(), &sample);
     if (FAILED(sampleHr)) {
       if (!sampleFailureLogged_) {
         sampleFailureLogged_ = true;

@@ -10,6 +10,10 @@
 namespace rcvcam {
 
 void FrameSource::start() {
+  // `create()` begins a new consumer generation even after a worker self-terminated
+  // without the ordinary stop path. Never carry a geometry-publication cache into it.
+  requestedWidth_ = 0;
+  requestedHeight_ = 0;
   const HRESULT hr = ring_.create();
   ringReady_ = SUCCEEDED(hr);
   if (!ringReady_) {
@@ -21,6 +25,11 @@ void FrameSource::start() {
 void FrameSource::stop() {
   ring_.close();
   ringReady_ = false;
+  // Closing the consumer advances/clears the ring's request generation. A later
+  // stream session must publish its geometry again even when it selects the same type;
+  // retaining these cache values would leave a newly attached producer at S_FALSE.
+  requestedWidth_ = 0;
+  requestedHeight_ = 0;
   lastWasLive_ = false;
   everLogged_ = false;
   mismatchLogged_ = false;  // warn again next session, not once per process lifetime

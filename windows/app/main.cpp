@@ -1,16 +1,25 @@
 #include <windows.h>
 
 #include <QCoreApplication>
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QUrl>
+#include <QWindow>
 #include <cstdlib>
+#include <memory>
 #include <string>
 
 #include "bonjour_advertiser.h"
+#if defined(RC_APP_E2E_HOST)
 #include "frame_producer.h"
+#else
+#include "live_media_pipeline.h"
+#include "preview_provider.h"
+#endif
 #include "session_status.h"
+#include "shell_controller.h"
+#include "phone_controller.h"
 #include "rcbackend/session_controller.h"
 #include "rcnet/tcp_listener.h"
 #include "rcwin/hr.h"
@@ -31,7 +40,7 @@ class InsecureE2ETrustPolicy final : public rcbackend::ITrustPolicy {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  QGuiApplication app(argc, argv);
+  QApplication app(argc, argv);
   QGuiApplication::setApplicationName(QStringLiteral("RemoteCam"));
   QGuiApplication::setOrganizationName(QStringLiteral("RemoteCam"));
   rcwin::logInit(L"rc-app");
@@ -44,9 +53,18 @@ int main(int argc, char* argv[]) {
   const DWORD mutexError = ::GetLastError();
   const bool producerConflict = producerMutex && mutexError == ERROR_ALREADY_EXISTS;
 
+#if defined(RC_APP_E2E_HOST)
   rcapp::FrameProducer producer;
+#else
+  rcapp::LiveMediaPipeline producer;
+#endif
   rcapp::BonjourAdvertiser discovery;
   rcapp::SessionStatus sessionStatus;
+#if defined(RC_APP_E2E_HOST)
+  rcapp::ShellController shellController(producer, false);
+#else
+  rcapp::ShellController shellController(producer, true);
+#endif
 #if defined(RC_APP_E2E_HOST)
   InsecureE2ETrustPolicy trustPolicy;
 #else
@@ -62,8 +80,18 @@ int main(int argc, char* argv[]) {
     }
   }
 #endif
-  rcbackend::SessionController sessionHandler(sessionConfig, trustPolicy, nullptr,
-                                              &sessionStatus);
+  rcbackend::SessionController sessionHandler(
+      sessionConfig, trustPolicy,
+#if defined(RC_APP_E2E_HOST)
+      nullptr,
+#else
+      &producer,
+#endif
+      &sessionStatus);
+  rcapp::PhoneController phoneController(sessionHandler);
+#if !defined(RC_APP_E2E_HOST)
+  producer.setKeyframeRequester([&sessionHandler] { sessionHandler.requestKeyframe(); });
+#endif
   rcnet::TcpListener listener;
   bool testLoopback = false;
 #if defined(RC_APP_E2E_HOST)
@@ -100,9 +128,16 @@ int main(int argc, char* argv[]) {
   }
 
   QQmlApplicationEngine engine;
+#if !defined(RC_APP_E2E_HOST)
+  auto previewProvider = std::make_unique<rcapp::PreviewProvider>();
+  producer.setPreviewProvider(previewProvider.get());
+  engine.addImageProvider(QStringLiteral("live"), previewProvider.release());
+#endif
   engine.rootContext()->setContextProperty(QStringLiteral("frameProducer"), &producer);
   engine.rootContext()->setContextProperty(QStringLiteral("lanDiscovery"), &discovery);
   engine.rootContext()->setContextProperty(QStringLiteral("sessionStatus"), &sessionStatus);
+  engine.rootContext()->setContextProperty(QStringLiteral("shellController"), &shellController);
+  engine.rootContext()->setContextProperty(QStringLiteral("phoneController"), &phoneController);
 #if defined(RC_APP_E2E_HOST)
   engine.rootContext()->setContextProperty(QStringLiteral("appE2EMode"), true);
   const QUrl mainUrl(QStringLiteral("qrc:/qml/Main.qml"));
@@ -117,6 +152,9 @@ int main(int argc, char* argv[]) {
       },
       Qt::QueuedConnection);
   engine.load(mainUrl);
+  if (!engine.rootObjects().isEmpty()) {
+    shellController.attachWindow(qobject_cast<QWindow*>(engine.rootObjects().constFirst()));
+  }
 
   const int result = app.exec();
   listener.stop();

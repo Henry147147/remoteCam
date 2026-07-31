@@ -7,6 +7,10 @@ add_library(rcwin-platform STATIC
     src/abr_controller.cpp
     src/d3d11_transform.cpp
     src/ffmpeg_d3d11_decoder.cpp
+    src/frame_ring_sink.cpp
+    src/mf_mp4_writer.cpp
+    src/mp4_recorder.cpp
+    src/pixel_convert.cpp
     src/shader_constants.cpp
     src/video_pipeline.cpp
 )
@@ -19,6 +23,12 @@ target_link_libraries(rcwin-platform PUBLIC
     d3d11
     d3dcompiler
     dxgi
+)
+target_link_libraries(rcwin-platform PRIVATE
+    mfplat
+    mfreadwrite
+    mfuuid
+    ole32
 )
 rc_target_strict_warnings(rcwin-platform)
 
@@ -35,4 +45,10 @@ if(RC_BUILD_TESTS)
     target_link_libraries(rcwin-platform-tests PRIVATE rcwin-platform)
     rc_target_strict_warnings(rcwin-platform-tests)
     add_test(NAME rcwin-platform-tests COMMAND rcwin-platform-tests)
+
+    add_executable(rcwin-mp4-recorder-tests tests/mp4_recorder_test.cpp)
+    target_include_directories(rcwin-mp4-recorder-tests PRIVATE src)
+    target_link_libraries(rcwin-mp4-recorder-tests PRIVATE rcwin-platform)
+    rc_target_strict_warnings(rcwin-mp4-recorder-tests)
+    add_test(NAME rcwin-mp4-recorder-tests COMMAND rcwin-mp4-recorder-tests)
 endif()

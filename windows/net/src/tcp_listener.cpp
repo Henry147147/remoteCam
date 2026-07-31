@@ -57,15 +57,22 @@ Connection::~Connection() { close(); }
 
 HRESULT Connection::send(uint8_t channel, uint8_t frameFlags, uint64_t ptsMicros,
                          const uint8_t* payload, size_t payloadSize) {
-  std::lock_guard<std::mutex> lock(socketMutex_);
-  if (socket_ == INVALID_SOCKET) return HRESULT_FROM_WIN32(ERROR_INVALID_STATE);
-
   std::vector<uint8_t> bytes;
   const rc::wire::Error framingError =
       rc::wire::encode(channel, frameFlags, ptsMicros, payload, payloadSize, bytes);
   if (framingError != rc::wire::Error::None) {
     RC_ERR(L"refusing to send an unframable message: %hs", rc::wire::errorText(framingError));
     return E_INVALIDARG;
+  }
+
+  std::lock_guard<std::mutex> sendLock(sendMutex_);
+  SOCKET socket = INVALID_SOCKET;
+  {
+    std::lock_guard<std::mutex> lock(socketMutex_);
+    if (socket_ == INVALID_SOCKET || closing_) {
+      return HRESULT_FROM_WIN32(ERROR_INVALID_STATE);
+    }
+    socket = socket_;
   }
 
   size_t sent = 0;
@@ -75,13 +82,14 @@ HRESULT Connection::send(uint8_t channel, uint8_t frameFlags, uint64_t ptsMicros
     // that only shows up on large keyframes.
     const int chunk = static_cast<int>(
         (bytes.size() - sent) > INT_MAX ? INT_MAX : (bytes.size() - sent));
-    const int result = ::send(socket_, reinterpret_cast<const char*>(bytes.data() + sent),
+    const int result = ::send(socket, reinterpret_cast<const char*>(bytes.data() + sent),
                               chunk, 0);
     if (result == SOCKET_ERROR) {
       const HRESULT hr = lastWsaError();
       RC_WARN(L"send to %hs failed: %s", peer_.c_str(), rcwin::hrMessage(hr).c_str());
       return hr;
     }
+    if (result == 0) return HRESULT_FROM_WIN32(ERROR_CONNECTION_ABORTED);
     sent += static_cast<size_t>(result);
   }
   return S_OK;
@@ -94,20 +102,31 @@ HRESULT Connection::send(const rc::wire::Frame& frame) {
 
 void Connection::shutdownSend() {
   std::lock_guard<std::mutex> lock(socketMutex_);
-  if (socket_ != INVALID_SOCKET) ::shutdown(socket_, SD_SEND);
+  if (socket_ != INVALID_SOCKET && !closing_) ::shutdown(socket_, SD_SEND);
 }
 
 void Connection::close() {
-  std::lock_guard<std::mutex> lock(socketMutex_);
-  if (socket_ != INVALID_SOCKET) {
-    ::closesocket(socket_);
+  {
+    std::lock_guard<std::mutex> lock(socketMutex_);
+    if (socket_ == INVALID_SOCKET) return;
+    closing_ = true;
+    // closesocket is intentionally outside sendMutex_: Windows cancels the blocking
+    // Winsock call in the sender/receiver, while waiting on sendMutex first would let a
+    // non-reading peer control shutdown latency. Mark the handle invalid before the
+    // close so no new operation can capture it.
+    const SOCKET socket = socket_;
     socket_ = INVALID_SOCKET;
+    ::closesocket(socket);
   }
+
+  // Do not let the Connection leave scope until a cancelled send has returned and
+  // released its frame buffer.
+  std::lock_guard<std::mutex> sendLock(sendMutex_);
 }
 
 bool Connection::valid() const {
   std::lock_guard<std::mutex> lock(socketMutex_);
-  return socket_ != INVALID_SOCKET;
+  return socket_ != INVALID_SOCKET && !closing_;
 }
 
 TcpListener::~TcpListener() { stop(); }
@@ -128,6 +147,20 @@ HRESULT TcpListener::start(uint16_t port, SessionHandler* handler, bool loopback
   if (listenSocket_ == INVALID_SOCKET) {
     const HRESULT hr = lastWsaError();
     RC_ERR(L"socket() failed: %s", rcwin::hrMessage(hr).c_str());
+    return hr;
+  }
+
+  // SO_EXCLUSIVEADDRUSE is the only Windows option that prevents a later socket using
+  // SO_REUSEADDR from binding the same port and stealing incoming phone connections.
+  BOOL exclusiveAddress = TRUE;
+  if (::setsockopt(listenSocket_, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+                   reinterpret_cast<const char*>(&exclusiveAddress),
+                   sizeof(exclusiveAddress)) == SOCKET_ERROR) {
+    const HRESULT hr = lastWsaError();
+    RC_ERR(L"could not reserve the listener port exclusively: %s",
+           rcwin::hrMessage(hr).c_str());
+    ::closesocket(listenSocket_);
+    listenSocket_ = INVALID_SOCKET;
     return hr;
   }
 
@@ -257,6 +290,12 @@ void TcpListener::serveConnection(SOCKET socket, SessionHandler* handler) {
                    sizeof(noDelay)) == SOCKET_ERROR) {
     RC_WARN(L"could not set TCP_NODELAY: %s", rcwin::hrMessage(lastWsaError()).c_str());
   }
+  DWORD sendTimeout = kConnectionSendTimeoutMillis;
+  if (::setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO,
+                   reinterpret_cast<const char*>(&sendTimeout),
+                   sizeof(sendTimeout)) == SOCKET_ERROR) {
+    RC_WARN(L"could not bound socket sends: %s", rcwin::hrMessage(lastWsaError()).c_str());
+  }
 
   Connection connection(socket);
   {
@@ -272,6 +311,10 @@ void TcpListener::serveConnection(SOCKET socket, SessionHandler* handler) {
   HRESULT reason = S_OK;
 
   while (!stopping_.load(std::memory_order_acquire)) {
+    if (!connection.valid()) {
+      reason = HRESULT_FROM_WIN32(ERROR_CONNECTION_ABORTED);
+      break;
+    }
     const int received =
         ::recv(socket, reinterpret_cast<char*>(chunk.data()), kReceiveChunkBytes, 0);
     if (received == 0) break;  // orderly close
@@ -290,7 +333,15 @@ void TcpListener::serveConnection(SOCKET socket, SessionHandler* handler) {
 
     // Frames that completed before the error are still delivered: they are the context
     // for whatever went wrong, and the connection is closing either way.
-    for (const rc::wire::Frame& frame : frames) handler->onFrame(connection, frame);
+    for (const rc::wire::Frame& frame : frames) {
+      handler->onFrame(connection, frame);
+      if (!connection.valid()) break;
+    }
+
+    if (!connection.valid()) {
+      reason = HRESULT_FROM_WIN32(ERROR_CONNECTION_ABORTED);
+      break;
+    }
 
     if (framingError != rc::wire::Error::None) {
       RC_ERR(L"framing error from %hs (%hs); closing the connection",

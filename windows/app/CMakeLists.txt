@@ -16,8 +16,14 @@ qt_add_executable(rc-app
     bonjour_advertiser.cpp
     bonjour_advertiser.h
     main.cpp
-    frame_producer.cpp
-    frame_producer.h
+    live_media_pipeline.cpp
+    live_media_pipeline.h
+    preview_provider.cpp
+    preview_provider.h
+    phone_controller.cpp
+    phone_controller.h
+    shell_controller.cpp
+    shell_controller.h
     session_status.cpp
     session_status.h
 )
@@ -33,8 +39,10 @@ qt_add_qml_module(rc-app
 target_link_libraries(rc-app PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Widgets
     rcwin-backend
     rcwin-common
+    rcwin-platform
     dnsapi
 )
 
@@ -62,6 +70,10 @@ if(RC_BUILD_TESTS)
         main.cpp
         frame_producer.cpp
         frame_producer.h
+        phone_controller.cpp
+        phone_controller.h
+        shell_controller.cpp
+        shell_controller.h
         session_status.cpp
         session_status.h
     )
@@ -73,6 +85,7 @@ if(RC_BUILD_TESTS)
     target_link_libraries(rc-e2e PRIVATE
         Qt6::Quick
         Qt6::QuickControls2
+        Qt6::Widgets
         rcwin-backend
         rcwin-common
         dnsapi

@@ -36,6 +36,7 @@ enum CBORError: Error, Equatable {
     case nestingLimitExceeded
     case trailingBytes
     case integerOverflow
+    case nonMinimalInteger
     case duplicateMapKey(String)
     case collectionTooLarge
 }
@@ -186,10 +187,22 @@ enum CBORDecoder {
         mutating func readLength(_ additional: UInt8) throws -> UInt64 {
             switch additional {
             case 0...23: return UInt64(additional)
-            case 24: return UInt64(try readByte())
-            case 25: return UInt64(try readInteger(UInt16.self))
-            case 26: return UInt64(try readInteger(UInt32.self))
-            case 27: return try readInteger(UInt64.self)
+            case 24:
+                let value = UInt64(try readByte())
+                guard value >= 24 else { throw CBORError.nonMinimalInteger }
+                return value
+            case 25:
+                let value = UInt64(try readInteger(UInt16.self))
+                guard value > UInt8.max else { throw CBORError.nonMinimalInteger }
+                return value
+            case 26:
+                let value = UInt64(try readInteger(UInt32.self))
+                guard value > UInt16.max else { throw CBORError.nonMinimalInteger }
+                return value
+            case 27:
+                let value = try readInteger(UInt64.self)
+                guard value > UInt32.max else { throw CBORError.nonMinimalInteger }
+                return value
             default: throw CBORError.invalidAdditionalInformation(additional)
             }
         }

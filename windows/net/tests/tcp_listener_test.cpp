@@ -125,9 +125,15 @@ class RecordingHandler final : public rcnet::SessionHandler {
 // including bytes no correct client would ever send.
 class FakePhone {
  public:
-  bool connect(uint16_t port) {
+  bool connect(uint16_t port, int receiveBufferBytes = 0) {
     socket_ = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (socket_ == INVALID_SOCKET) return false;
+    if (receiveBufferBytes > 0 &&
+        ::setsockopt(socket_, SOL_SOCKET, SO_RCVBUF,
+                     reinterpret_cast<const char*>(&receiveBufferBytes),
+                     sizeof(receiveBufferBytes)) != 0) {
+      return false;
+    }
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = ::htons(port);
@@ -193,13 +199,8 @@ void testAcceptsAndReceives() {
   check(handler.waitForConnect(), "the handler sees the connection");
 
   std::vector<uint8_t> stream;
-  const rc::control::Message hello = [] {
-    rc::control::Message message;
-    message.type = "hello";
-    message.fields.insert_or_assign("v", rc::cbor::Value::unsignedInt(1));
-    message.fields.insert_or_assign("device_id", rc::cbor::Value::text("0123456789abcdef"));
-    return message;
-  }();
+  const rc::control::Message hello =
+      rc::control::hello("Test iPhone", "0123456789abcdef", "iPhone", {"h264"});
   const std::vector<uint8_t> helloPayload = hello.encode();
   rc::wire::encode(0, 0, 0, helloPayload.data(), helloPayload.size(), stream);
   check(phone.sendRaw(stream), "phone sends hello");
@@ -434,12 +435,29 @@ void testStartRejections() {
   check(listener.start(0, &handler, true) == HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS),
         "starting twice is refused");
 
-  // A port already bound by someone else must fail rather than silently share it --
-  // SO_REUSEADDR is deliberately not set, see tcp_listener.cpp.
+  // A port already bound by someone else must fail rather than silently share it.
   rcnet::TcpListener collision;
   RecordingHandler other;
   check(FAILED(collision.start(listener.boundPort(), &other, true)),
         "binding an occupied port fails instead of stealing it");
+
+  // On Windows, SO_REUSEADDR can otherwise bind over an existing listener. The
+  // listener's SO_EXCLUSIVEADDRUSE must defeat that stronger hostile case too.
+  SOCKET thief = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  check(thief != INVALID_SOCKET, "a raw collision socket opens");
+  if (thief != INVALID_SOCKET) {
+    BOOL reuse = TRUE;
+    check(::setsockopt(thief, SOL_SOCKET, SO_REUSEADDR,
+                       reinterpret_cast<const char*>(&reuse), sizeof(reuse)) == 0,
+          "the collision socket enables Windows address reuse");
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = ::htons(listener.boundPort());
+    address.sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
+    check(::bind(thief, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR,
+          "SO_EXCLUSIVEADDRUSE prevents a reuse socket from stealing the port");
+    ::closesocket(thief);
+  }
 
   listener.stop();
 }
@@ -532,6 +550,38 @@ void testConcurrentServerSendsStayFramed() {
   listener.stop();
 }
 
+void testStopInterruptsBlockedSend() {
+  std::printf("Stop interrupts a blocked send\n");
+  RecordingHandler handler;
+  rcnet::TcpListener listener;
+  check(SUCCEEDED(listener.start(0, &handler, true)), "listener starts");
+  FakePhone phone;
+  check(phone.connect(listener.boundPort(), 1024), "non-reading phone connects");
+  check(handler.waitForConnect(), "handler sees the non-reading phone");
+
+  rc::wire::Frame frame;
+  frame.channel = static_cast<uint8_t>(rc::wire::Channel::Video);
+  frame.payload.assign(2 * 1024 * 1024, 0x5a);
+  HRESULT sendHr = S_OK;
+  std::thread sender([&] {
+    // Loop because Windows loopback can absorb a surprising amount of data before a
+    // non-reading peer's advertised window finally closes.
+    while (SUCCEEDED(sendHr)) sendHr = handler.sendWithoutHandlerSerialization(frame);
+  });
+
+  // Give send() enough time to fill the socket window. stop() must shutdown the
+  // socket underneath it and complete well inside the configured send timeout bound.
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  const auto started = std::chrono::steady_clock::now();
+  listener.stop();
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  sender.join();
+
+  check(elapsed < std::chrono::seconds(5),
+        "listener shutdown remains bounded when the peer stops reading");
+  check(FAILED(sendHr), "the interrupted sender receives a failure");
+}
+
 }  // namespace
 
 int main() {
@@ -551,6 +601,7 @@ int main() {
   testStartRejections();
   testReusableTcpClient();
   testConcurrentServerSendsStayFramed();
+  testStopInterruptsBlockedSend();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

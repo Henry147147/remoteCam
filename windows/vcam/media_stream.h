@@ -21,6 +21,7 @@
 #include <thread>
 
 #include "frame_source.h"
+#include "media_format.h"
 #include "module_lock.h"
 
 namespace rcvcam {
@@ -57,6 +58,10 @@ class MediaStream final : public IMFMediaStream2 {
   IFACEMETHODIMP SetStreamState(MF_STREAM_STATE state) override;
   IFACEMETHODIMP GetStreamState(MF_STREAM_STATE* state) override;
 
+  // Applies the media type selected on the presentation descriptor passed to
+  // IMFMediaSource::Start. Media Foundation requires clients to change it only while
+  // stopped; changing an active stream is refused rather than racing buffer geometry.
+  HRESULT Configure(const VideoFormat& format, IMFMediaType* mediaType);
   HRESULT Start();
   HRESULT Stop();
   HRESULT Shutdown();
@@ -68,7 +73,8 @@ class MediaStream final : public IMFMediaStream2 {
   HRESULT Initialize(IMFMediaSource* source, IMFStreamDescriptor* descriptor,
                      IMFAttributes* attributes);
   void ThreadMain();
-  HRESULT ProduceSample(uint64_t frameIndex, LONGLONG timestamp, IMFSample** out);
+  HRESULT ProduceSample(const VideoFormat& format, uint64_t frameIndex,
+                        LONGLONG timestamp, IMFSample** out);
 
   // A consumer may hold the stream after releasing the source, so the stream keeps the
   // module alive in its own right rather than relying on the source to do it. Declared
@@ -85,6 +91,7 @@ class MediaStream final : public IMFMediaStream2 {
   bool running_ = false;
   bool requestOverflowLogged_ = false;
   bool sampleFailureLogged_ = false;
+  VideoFormat format_ = kDefaultVideoFormat;
 
   Microsoft::WRL::ComPtr<IMFMediaEventQueue> eventQueue_;
   Microsoft::WRL::ComPtr<IMFStreamDescriptor> descriptor_;

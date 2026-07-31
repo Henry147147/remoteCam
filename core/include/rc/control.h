@@ -6,28 +6,27 @@
 //
 // FORWARD COMPATIBILITY IS THE POINT OF THIS LAYER
 //
-// Unknown keys are preserved and ignored; unknown message types are ignored with a
-// warning rather than closing the connection. That pair of rules is what lets a newer
-// phone talk to an older PC, and it is why a malformed control message costs one
-// message while a malformed *frame* costs the connection -- framing loses the stream
-// position, this does not.
+// Unknown keys are preserved by Message::decode so callers can diagnose them, but a
+// known v1 parser rejects every field outside its exact schema. Unknown message types
+// are an explicitly authenticated additive-extension policy at the session layer.
+// Malformed control costs one message while a malformed *frame* costs the connection:
+// framing loses the stream position, this does not.
 //
 // The 1 MiB cap here is separate from, and far below, the 16 MiB framing cap. Framing
 // has to carry video; a control message that large is not a control message.
 //
-// PAIRING IS DELIBERATELY ABSENT. protocol.md describes SPAKE2, an HMAC-authenticated
-// control channel and ChaCha20-Poly1305 media, but docs/ios-backend-handoff.md records
-// that the curve, transcript encoding, KDF, MAC placement and nonce layout are all
-// still open joint decisions, and says in terms: do not guess independently. iOS
-// correspondingly never sends PAIR_COMMIT. Building half a key exchange here would
-// produce something that looks finished and interoperates with nothing.
+// Cryptography stays outside this portable message-shape layer. The normative profile
+// is fixed in protocol.md; Windows implements it in rcwin-security and authenticates
+// an envelope before passing the contained CBOR bytes to Message::decode.
 
 #ifndef RC_CONTROL_H
 #define RC_CONTROL_H
 
 #include <cstdint>
+#include <array>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "rc/cbor.h"
@@ -37,8 +36,8 @@ namespace rc::control {
 // A control payload above this is refused before the CBOR decoder is even entered.
 inline constexpr size_t kMaxPayloadBytes = size_t{1024} * 1024;
 
-// The protocol version this implementation speaks. A peer announcing a higher `v` is
-// refused with a clear message rather than guessed at (protocol.md "Versioning").
+// The protocol version this implementation speaks. The v1 handshake requires an exact
+// match rather than treating older or newer integers as compatible subsets.
 inline constexpr uint64_t kProtocolVersion = 1;
 
 enum class Error {
@@ -68,6 +67,7 @@ struct Message {
   // Convenience readers that apply the same strictness as the phone: a width sent as a
   // double is a protocol violation, not something to round.
   bool text(const char* key, std::string& out) const;
+  bool bytes(const char* key, std::vector<uint8_t>& out) const;
   bool unsignedInt(const char* key, uint64_t& out) const;
   bool boolean(const char* key, bool& out) const;
   bool number(const char* key, double& out) const;
@@ -105,10 +105,26 @@ StreamConfig conservativeDefault();
 Message serverInfo(const std::string& name, const std::string& id, bool paired,
                    const std::vector<std::string>& caps);
 Message ready(const StreamConfig& config);
+// The generation-bearing form is required for live reconfiguration. The legacy
+// overload remains for protocol fixtures that only inspect the config shape; a
+// SessionController never sends an unacknowledgeable set_format.
 Message setFormat(const StreamConfig& config);
+Message setFormat(const StreamConfig& config, uint64_t generation);
 Message setCamera(const std::string& lens, const std::optional<std::string>& position);
 Message requestKeyframe();
 Message setPreview(bool enabled);
+
+struct AuthChallenge {
+  std::array<uint8_t, 32> serverNonce{};
+  uint64_t expiresUnixSeconds = 0;
+};
+Message authChallenge(const AuthChallenge& value);
+
+struct AuthConfirm {
+  std::array<uint8_t, 32> serverProof{};
+  uint64_t sessionExpiresUnixSeconds = 0;
+};
+Message authConfirm(const AuthConfirm& value);
 
 // Every field optional: an absent key means "leave this alone" (protocol.md). Sending a
 // default-valued key instead would silently overwrite whatever the user set on the
@@ -150,6 +166,31 @@ Message hello(const std::string& deviceName, const std::string& deviceId,
               const std::string& model, const std::vector<std::string>& caps,
               const std::string& platform = "ios");
 Message streamStart();
+
+struct AuthResponse {
+  std::array<uint8_t, 32> clientNonce{};
+  std::array<uint8_t, 32> clientProof{};
+};
+Message authResponse(const AuthResponse& value);
+bool parseAuthResponse(const Message& message, AuthResponse& out);
+Message formatAck(uint64_t generation);
+bool parseFormatAck(const Message& message, uint64_t& generation);
+
+// A transactional live-format rebuild may fail on the phone after old-generation
+// media has stopped. The rejection rolls the PC back to its last committed format;
+// generation still identifies the exact pending request and zero remains reserved.
+struct FormatReject {
+  uint64_t generation = 0;
+  std::string code;
+  std::string message;
+};
+Message formatReject(const FormatReject& value);
+bool parseFormatReject(const Message& message, FormatReject& out);
+
+// Stable host/device identities in v1 are exactly 64 bits rendered as canonical
+// lowercase hexadecimal. Accepting aliases would let one pairing record be addressed
+// by multiple attacker-controlled strings.
+bool validDeviceId(std::string_view value);
 
 struct Hello {
   uint64_t version = 0;

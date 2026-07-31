@@ -272,9 +272,17 @@ ScenarioResult ScenarioEngine::runSession(const ScenarioOptions& options) {
       }
       if (effects.formatChanged) {
         media.reconfigure(model.streamConfig());
+        const HRESULT acknowledgeHr =
+            sendControl(client, rc::control::formatAck(effects.formatGeneration));
+        if (FAILED(acknowledgeHr)) {
+          reporter_.failure("control.format_ack", hrText(acknowledgeHr));
+          ++result.protocolFailures;
+          break;
+        }
         forceKeyframe = true;
         controlFamilies.insert("set_format");
-        reporter_.pass("control.set_format", "reconfigured stream and scheduled keyframe");
+        reporter_.pass("control.set_format",
+                       "reconfigured stream, acknowledged generation and scheduled keyframe");
       }
       if (effects.cameraChanged || effects.controlsChanged) {
         const HRESULT echoHr = sendControl(client, rc::control::cameraState(model.profile().camera));

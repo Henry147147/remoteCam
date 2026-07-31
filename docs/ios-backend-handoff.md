@@ -106,34 +106,39 @@ After capture and encode are live, iOS sends `stream_start {}` and begins video 
 channel 1. A subsequent `set_format` rebuilds capture/encode, forces a keyframe, and
 does not send another `stream_start`.
 
-## Security decisions required before production pairing
+**Required protocol follow-up:** the Windows backend now sends
+`set_format {..., generation}` and will not commit the new decoder configuration until
+iOS replies `format_ack {generation}` after the capture/encoder rebuild and before the
+first new-format access unit. If that rebuild fails, iOS sends
+`format_reject {generation, code, message}`; Windows retains its committed decoder,
+requests a keyframe, and resumes the old generation. The iOS wire receiver must also
+reject `v != 1`, non-canonical 16-lowercase-hex identities, and fragment flags to match
+the hardened v1 contract in `protocol.md`.
 
-`protocol.md` says “SPAKE2,” “HMAC-authenticated,” and “nonce = channel ‖ sequence,”
-but those descriptions do not uniquely define interoperable cryptography. Please
-open a small joint protocol change (do not guess independently) that fixes all of the
-following:
+## Security contract and remaining integration
 
-- SPAKE2 versus SPAKE2+, group/curve, hash, fixed M/N points, point encoding,
-  password-to-scalar method, participant identities, transcript encoding, KDF, key
-  confirmation MAC, salt length/encoding, and invalid-point handling.
-- Whether the six-digit code includes leading zeros and the required online retry
-  limit/cooldown. The PC should display the code; it must never cross the wire.
-- The exact derivation and Keychain/DPAPI record format for the long-term pairing
-  key, including host/device identifiers and key rotation/unpair behavior.
-- The authenticated control envelope: where the sequence number and authentication
-  tag live, exactly which header/payload bytes are MACed, tag truncation (if any),
-  canonical-CBOR requirements, replay window, and reconnect sequence reset rules.
-- The ChaCha20-Poly1305 media KDF, full 96-bit nonce layout, sequence transport, AAD,
-  tag placement, rekey limits, and whether stats are encrypted with the same or a
-  distinct subkey.
+The cryptographic choices are now normative in `protocol.md`: RFC 9382 SPAKE2 on
+P-256/SHA-256, phone/client role A and PC/server role B, exact M/N constants and
+transcript, scrypt code stretching, two-way key confirmation, nonce-bound reconnect
+authentication, direction/channel-separated keys and prefixes, HMAC envelopes, and
+ChaCha20-Poly1305 media/statistics envelopes. Treat those byte layouts as fixtures;
+do not infer a different layout from the older prose in either platform handbook.
 
-Until these are normative, the iOS app intentionally does not send `PAIR_COMMIT` or
-persist a pairing key. It also does not pretend unsigned control messages are secure.
-A backend-only fake server may skip pairing for local development, but that bypass
-must be a test executable or compile-time development option and must never ship in
-the Windows app. Debug builds of iOS accept `--allow-insecure-session` as an Xcode
-launch argument for this harness; Release builds compile out the bypass and reject
-every unauthenticated `ready` message.
+Windows now provides `rcwin-security`: exact OpenSSL 3.5.7 or fail closed, RFC vectors,
+DPAPI atomic storage, per-source/global throttling, `PairingServer`,
+`StoredSessionSecurity`, and a session protector. `SessionController` has a production
+constructor accepting `ISessionSecurity`; a claimed ID only starts a record lookup,
+and `ready` is sent inside an authenticated envelope only after the client proof.
+The legacy `ITrustPolicy` constructor remains solely for existing fake-phone/E2E test
+executables. At this checkpoint the shipping Qt app still constructs
+`RejectingTrustPolicy`, so UI pairing orchestration and selecting the secure constructor
+remain explicit desktop-app integration work rather than an implied insecure fallback.
+
+iOS must implement the matching role-A PAKE, persist the verified long-term key in the
+Keychain, exchange `auth_challenge`/`auth_response`/`auth_confirm`, and install the
+protector before accepting `ready`. It must reject non-minimal CBOR integers and extra
+fields on known v1 messages. Debug builds may retain `--allow-insecure-session` for the
+local harness; Release must never accept an unauthenticated `ready`.
 
 ## Two protocol ordering decisions
 

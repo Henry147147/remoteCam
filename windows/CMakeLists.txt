@@ -27,6 +27,7 @@ endif()
 
 add_subdirectory(common)      # rcwin-common     Win32 helpers, NV12, SHM ring
 add_subdirectory(net)         # rcwin-net        TCP receiver the phone connects to
+add_subdirectory(security)    # SPAKE2, authenticated sessions, DPAPI pairing store
 add_subdirectory(platform)    # decoder, D3D11 transform and frame pipeline
 add_subdirectory(vcam)        # rc-vcam.dll      MF media source, loaded in Session 0
 add_subdirectory(register)    # rc-vcam-register.exe
@@ -38,7 +39,7 @@ add_subdirectory(backend)     # rcwin-backend    auth-gated session controller
 # installation is available, but do not make that an artificial dependency of the DLL.
 option(RC_BUILD_QT_APP "Build the Qt 6 / QML RemoteCam producer" ON)
 if(RC_BUILD_QT_APP)
-    find_package(Qt6 6.2 QUIET COMPONENTS Quick QuickControls2)
+    find_package(Qt6 6.2 QUIET COMPONENTS Quick QuickControls2 Widgets)
     if(Qt6_FOUND)
         add_subdirectory(app)
     else()
@@ -46,6 +47,31 @@ if(RC_BUILD_QT_APP)
             "Qt 6 Quick/QuickControls2 not found; skipping rc-app. "
             "Set CMAKE_PREFIX_PATH to a dynamic Qt 6 installation to build it.")
     endif()
+endif()
+
+# Embed consistent Explorer/version metadata in every executable or DLL that ships.
+# Defining the resources here keeps the individual component build files focused on
+# their runtime responsibilities while still covering non-Qt M1 builds.
+function(rc_add_windows_version_resource target original_filename description file_type)
+    set(RC_VERSION_ORIGINAL_FILENAME "${original_filename}")
+    set(RC_VERSION_FILE_DESCRIPTION "${description}")
+    set(RC_VERSION_FILE_TYPE "${file_type}")
+    set(_rc_version_resource
+        "${CMAKE_CURRENT_BINARY_DIR}/${target}-version.rc")
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/installer/RemoteCamVersion.rc.in"
+        "${_rc_version_resource}"
+        @ONLY)
+    target_sources(${target} PRIVATE "${_rc_version_resource}")
+endfunction()
+
+rc_add_windows_version_resource(
+    rc-vcam "rc-vcam.dll" "RemoteCam Media Foundation virtual camera" VFT_DLL)
+rc_add_windows_version_resource(
+    rc-vcam-register "rc-vcam-register.exe" "RemoteCam virtual camera registration tool" VFT_APP)
+if(TARGET rc-app)
+    rc_add_windows_version_resource(
+        rc-app "RemoteCam.exe" "RemoteCam desktop application" VFT_APP)
 endif()
 
 # installer/ holds the CPack + NSIS configuration, but it is not a subdirectory: CPack

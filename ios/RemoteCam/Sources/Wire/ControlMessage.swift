@@ -50,6 +50,20 @@ extension ControlMessage {
         ControlMessage(type: "stream_start")
     }
 
+    static func formatAcknowledged(generation: UInt64) -> ControlMessage {
+        ControlMessage(type: "format_ack", fields: [
+            "generation": .unsigned(generation)
+        ])
+    }
+
+    static func formatRejected(generation: UInt64, code: String, message: String) -> ControlMessage {
+        ControlMessage(type: "format_reject", fields: [
+            "generation": .unsigned(generation),
+            "code": .string(code),
+            "message": .string(message)
+        ])
+    }
+
     static func capabilities(_ capabilities: [CameraCapability]) -> ControlMessage {
         let cameras = capabilities.map { capability in
             CBORValue.map([

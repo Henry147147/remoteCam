@@ -127,8 +127,9 @@ class Reader {
   size_t offset_ = 0;
 };
 
-// Reads the argument that follows a major type. Accepts non-shortest encodings, as
-// Swift's readLength does; rejects indefinite lengths (31) and the reserved 28-30.
+// Reads the argument that follows a major type. V1 is deterministic: integer and
+// length arguments must use the shortest possible head. Indefinite lengths (31) and
+// the reserved 28-30 are rejected as well.
 Error readArgument(Reader& reader, uint8_t additional, uint64_t& out) {
   if (additional < 24) {
     out = additional;
@@ -140,11 +141,23 @@ Error readArgument(Reader& reader, uint8_t additional, uint64_t& out) {
       const Error err = reader.readByte(byte);
       if (err != Error::None) return err;
       out = byte;
-      return Error::None;
+      return out >= 24 ? Error::None : Error::NonMinimalInteger;
     }
-    case 25: return reader.readBigEndian(2, out);
-    case 26: return reader.readBigEndian(4, out);
-    case 27: return reader.readBigEndian(8, out);
+    case 25: {
+      const Error err = reader.readBigEndian(2, out);
+      if (err != Error::None) return err;
+      return out > 0xffu ? Error::None : Error::NonMinimalInteger;
+    }
+    case 26: {
+      const Error err = reader.readBigEndian(4, out);
+      if (err != Error::None) return err;
+      return out > 0xffffu ? Error::None : Error::NonMinimalInteger;
+    }
+    case 27: {
+      const Error err = reader.readBigEndian(8, out);
+      if (err != Error::None) return err;
+      return out > 0xffffffffull ? Error::None : Error::NonMinimalInteger;
+    }
     default: return Error::InvalidAdditionalInformation;
   }
 }
@@ -331,6 +344,7 @@ const char* errorText(Error error) {
     case Error::None: return "none";
     case Error::Truncated: return "truncated";
     case Error::InvalidAdditionalInformation: return "invalid additional information";
+    case Error::NonMinimalInteger: return "non-minimal integer or length";
     case Error::InvalidUtf8: return "invalid utf-8";
     case Error::UnsupportedMapKey: return "unsupported map key";
     case Error::UnsupportedSimpleValue: return "unsupported simple value";
