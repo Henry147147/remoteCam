@@ -25,6 +25,7 @@ final class DeviceTelemetry: ObservableObject {
     private var observers: [NSObjectProtocol] = []
 
     init() {
+        RemoteCamLog.info("telemetry", "starting battery, thermal, orientation monitoring")
         UIDevice.current.isBatteryMonitoringEnabled = true
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         observeNotifications()
@@ -48,7 +49,10 @@ final class DeviceTelemetry: ObservableObject {
     }
 
     private func startMotion() {
-        guard motion.isDeviceMotionAvailable else { return }
+        guard motion.isDeviceMotionAvailable else {
+            RemoteCamLog.error("telemetry", "device motion unavailable")
+            return
+        }
         motion.deviceMotionUpdateInterval = 0.2
         motion.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
             guard let self, let roll = motion?.attitude.roll else { return }
@@ -73,6 +77,7 @@ final class DeviceTelemetry: ObservableObject {
     }
 
     private func refreshSystemValues() {
+        let previousThermal = snapshot.thermal
         let device = UIDevice.current
         snapshot.batteryLevel = min(max(Double(device.batteryLevel), 0), 1)
         snapshot.charging = device.batteryState == .charging || device.batteryState == .full
@@ -81,6 +86,9 @@ final class DeviceTelemetry: ObservableObject {
         case .serious: .serious
         case .critical: .critical
         default: .nominal
+        }
+        if snapshot.thermal != previousThermal {
+            RemoteCamLog.info("telemetry", "thermal state=\(snapshot.thermal.rawValue)")
         }
         onUpdate?(snapshot)
     }

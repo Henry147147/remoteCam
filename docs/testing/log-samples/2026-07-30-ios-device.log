@@ -1,0 +1,37 @@
+# RemoteCam physical-device diagnostic sample
+# Captured 2026-07-30 from a Debug build on iPhone 17 Pro Max, iOS 27.0.
+# Network addresses and device-specific identifiers are redacted.
+
+# Initial Windows connection attempt
+[RemoteCam][telemetry] starting battery, thermal, orientation monitoring
+[RemoteCam][app] AppModel initialized; iOS=27.0
+[RemoteCam][app] starting app services
+[RemoteCam][discovery] starting Bonjour browse for _remotecam._tcp
+[RemoteCam][discovery] browser ready
+[RemoteCam][discovery] results changed; valid_hosts=0, names=
+[RemoteCam][session] connect requested for host=<windows-host>, source=manual
+[RemoteCam][session] phase=connecting
+[RemoteCam][transport] connecting to <windows-host>:7890
+[RemoteCam][transport] NWConnection state=preparing
+[RemoteCam][transport] NWConnection state=ready
+[RemoteCam][transport] TCP connection ready
+[RemoteCam][session] transport ready; sending hello
+[RemoteCam][protocol] send control type=hello
+[RemoteCam][protocol] received channel=0, type=server_info, bytes=80
+[RemoteCam][session] phase=awaiting_pairing
+[RemoteCam][transport] connection failed: The operation couldn’t be completed. (Network.NWError error 54 - Connection reset by peer)
+[RemoteCam][session] phase=reconnecting(attempt=1)
+[RemoteCam][session] reconnect attempt=1, delay_seconds=1.0, reason=The operation couldn’t be completed. (Network.NWError error 54 - Connection reset by peer)
+[RemoteCam][transport] NWConnection state=failed(POSIXErrorCode(rawValue: 54): Connection reset by peer)
+[RemoteCam][transport] NWConnection state=cancelled
+
+# Post-fix startup verification
+[RemoteCam][telemetry] starting battery, thermal, orientation monitoring
+[RemoteCam][app] AppModel initialized; iOS=27.0
+[RemoteCam][app] starting app services
+[RemoteCam][discovery] starting Bonjour browse for _remotecam._tcp
+[RemoteCam][camera] preparing camera
+[RemoteCam][camera] authorization=granted
+[RemoteCam][discovery] browser ready
+[RemoteCam][discovery] results changed; valid_hosts=0, names=
+[RemoteCam][camera] setup complete; devices=9, capabilities=9

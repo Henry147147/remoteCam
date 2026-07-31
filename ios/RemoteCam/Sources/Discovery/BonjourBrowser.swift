@@ -14,6 +14,7 @@ final class BonjourBrowser: ObservableObject {
 
     func start() {
         guard browser == nil else { return }
+        RemoteCamLog.info("discovery", "starting Bonjour browse for _remotecam._tcp")
         generation += 1
         let currentGeneration = generation
         errorMessage = nil
@@ -45,17 +46,23 @@ final class BonjourBrowser: ObservableObject {
                 guard let self, self.generation == currentGeneration else { return }
                 self.endpointsByID = Dictionary(uniqueKeysWithValues: parsed.map { ($0.0.id, $0.1) })
                 self.hosts = parsed.map(\.0).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                RemoteCamLog.info(
+                    "discovery",
+                    "results changed; valid_hosts=\(self.hosts.count), names=\(self.hosts.map(\.name).joined(separator: ","))"
+                )
             }
         }
         browser.start(queue: queue)
     }
 
     func restart() {
+        RemoteCamLog.info("discovery", "restart requested")
         stop(clearResults: true)
         start()
     }
 
     func stop(clearResults: Bool = false) {
+        RemoteCamLog.info("discovery", "stopping browse; clear_results=\(clearResults)")
         generation += 1
         let oldBrowser = browser
         browser = nil
@@ -74,14 +81,18 @@ final class BonjourBrowser: ObservableObject {
     private func handle(_ state: NWBrowser.State) {
         switch state {
         case .ready:
+            RemoteCamLog.info("discovery", "browser ready")
             isSearching = true
             errorMessage = nil
         case .failed(let error):
+            RemoteCamLog.error("discovery", "browser failed: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
             stop(clearResults: true)
         case .cancelled:
+            RemoteCamLog.info("discovery", "browser cancelled")
             isSearching = false
         case .waiting(let error):
+            RemoteCamLog.info("discovery", "browser waiting: \(error.localizedDescription)")
             isSearching = true
             errorMessage = "Waiting for local network access: \(error.localizedDescription)"
         case .setup:

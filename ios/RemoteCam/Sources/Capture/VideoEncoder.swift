@@ -1,6 +1,31 @@
 @preconcurrency import AVFoundation
 @preconcurrency import VideoToolbox
 import Foundation
+import OSLog
+
+enum RemoteCamLog {
+    private static let logger = Logger(subsystem: "org.remotecam.ios", category: "runtime")
+
+    static func debug(_ category: String, _ message: String) {
+        record(level: .debug, category: category, message: message)
+    }
+
+    static func info(_ category: String, _ message: String) {
+        record(level: .info, category: category, message: message)
+    }
+
+    static func error(_ category: String, _ message: String) {
+        record(level: .error, category: category, message: message)
+    }
+
+    private static func record(level: OSLogType, category: String, message: String) {
+        let line = "[\(category)] \(message)"
+        logger.log(level: level, "\(line, privacy: .public)")
+#if DEBUG
+        print("[RemoteCam]\(line)")
+#endif
+    }
+}
 
 struct EncodedAccessUnit: Sendable {
     let data: Data
@@ -27,6 +52,8 @@ final class VideoEncoder: @unchecked Sendable {
     private var session: VTCompressionSession?
     private var configuration: StreamConfiguration?
     private var forceKeyframe = false
+    private var encodedFrameCount: UInt64 = 0
+    private var encodedByteCount: UInt64 = 0
 
     var onAccessUnit: (@Sendable (EncodedAccessUnit) -> Void)?
     var onError: (@Sendable (Error) -> Void)?
@@ -35,6 +62,11 @@ final class VideoEncoder: @unchecked Sendable {
         try queue.sync {
             invalidateLocked()
             let configuration = try configuration.validated()
+            RemoteCamLog.info(
+                "encoder",
+                "configuring \(configuration.codec.rawValue) \(configuration.width)x\(configuration.height) " +
+                    "at \(configuration.framesPerSecond) fps, bitrate=\(configuration.bitrate)"
+            )
             let codec: CMVideoCodecType = configuration.codec == .hevc ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264
             let encoderSpecification = [
                 kVTVideoEncoderSpecification_EnableLowLatencyRateControl as String: true
@@ -66,7 +98,11 @@ final class VideoEncoder: @unchecked Sendable {
                 }
                 let prepareStatus = VTCompressionSessionPrepareToEncodeFrames(created)
                 guard prepareStatus == noErr else { throw VideoEncoderError.cannotCreate(prepareStatus) }
+                encodedFrameCount = 0
+                encodedByteCount = 0
+                RemoteCamLog.info("encoder", "VideoToolbox session ready")
             } catch {
+                RemoteCamLog.error("encoder", "configuration failed: \(error.localizedDescription)")
                 invalidateLocked()
                 throw error
             }
@@ -101,12 +137,21 @@ final class VideoEncoder: @unchecked Sendable {
 
     func updateBitrate(_ bitrate: Int) {
         queue.async { [weak self] in
-            do { try self?.applyBitrateLocked(bitrate) } catch { self?.onError?(error) }
+            do {
+                try self?.applyBitrateLocked(bitrate)
+                RemoteCamLog.info("encoder", "bitrate updated to \(bitrate)")
+            } catch {
+                RemoteCamLog.error("encoder", "bitrate update failed: \(error.localizedDescription)")
+                self?.onError?(error)
+            }
         }
     }
 
     func requestKeyframe() {
-        queue.async { [weak self] in self?.forceKeyframe = true }
+        queue.async { [weak self] in
+            self?.forceKeyframe = true
+            RemoteCamLog.debug("encoder", "keyframe requested")
+        }
     }
 
     func invalidate() {
@@ -134,6 +179,10 @@ final class VideoEncoder: @unchecked Sendable {
 
     private func invalidateLocked() {
         guard let session else { return }
+        RemoteCamLog.info(
+            "encoder",
+            "invalidating after \(encodedFrameCount) access units / \(encodedByteCount) bytes"
+        )
         VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
         VTCompressionSessionInvalidate(session)
         self.session = nil
@@ -151,8 +200,20 @@ final class VideoEncoder: @unchecked Sendable {
             let data = try VideoEncoder.annexBData(from: sampleBuffer, includeParameterSets: isKeyframe)
             let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let micros = UInt64(max(CMTimeGetSeconds(pts), 0) * 1_000_000)
+            encoder.encodedFrameCount &+= 1
+            encoder.encodedByteCount &+= UInt64(data.count)
+            if encoder.encodedFrameCount == 1 || encoder.encodedFrameCount.isMultiple(of: 120) {
+                RemoteCamLog.info(
+                    "encoder",
+                    "encoded access units=\(encoder.encodedFrameCount), bytes=\(encoder.encodedByteCount), " +
+                        "latest_keyframe=\(isKeyframe)"
+                )
+            } else if isKeyframe {
+                RemoteCamLog.debug("encoder", "encoded keyframe bytes=\(data.count)")
+            }
             encoder.onAccessUnit?(EncodedAccessUnit(data: data, presentationTimeMicros: micros, isKeyframe: isKeyframe))
         } catch {
+            RemoteCamLog.error("encoder", "output conversion failed: \(error.localizedDescription)")
             encoder.onError?(error)
         }
     }
