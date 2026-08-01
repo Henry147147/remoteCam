@@ -1,6 +1,27 @@
 import XCTest
 
 final class ControlMessageTests: XCTestCase {
+    // The Windows parseHello whitelist rejects a hello carrying any key it does not know,
+    // so the key spelling here is load-bearing: get it wrong and the PC closes the
+    // connection rather than ignoring the field.
+    @MainActor
+    func testHelloCarriesTheUnauthenticatedOptOut() throws {
+        let asking = try ControlMessage(
+            payload: ControlMessage.hello(deviceID: "0123456789abcdef",
+                                          allowUnauthenticated: true).encoded())
+        XCTAssertEqual(asking.type, "hello")
+        XCTAssertEqual(asking.fields["allow_unauthenticated"]?.boolValue, true)
+        XCTAssertEqual(asking.fields["device_id"]?.stringValue, "0123456789abcdef")
+        XCTAssertEqual(asking.fields["v"], .unsigned(1))
+
+        // Present and false, never omitted: the PC treats an absent field as "did not
+        // ask", and both encodings must mean the same thing.
+        let withholding = try ControlMessage(
+            payload: ControlMessage.hello(deviceID: "0123456789abcdef",
+                                          allowUnauthenticated: false).encoded())
+        XCTAssertEqual(withholding.fields["allow_unauthenticated"]?.boolValue, false)
+    }
+
     func testCameraStateUsesDocumentedUnitsAndKeys() throws {
         var state = CameraControlState()
         state.deviceID = "camera-1"

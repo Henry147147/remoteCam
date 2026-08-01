@@ -16,6 +16,7 @@ class SessionStatus final : public QObject, public rcbackend::IBackendObserver {
   Q_PROPERTY(QString stateLabel READ stateLabel NOTIFY changed)
   Q_PROPERTY(QString detail READ detail NOTIFY changed)
   Q_PROPERTY(bool streaming READ streaming NOTIFY changed)
+  Q_PROPERTY(bool unauthenticated READ unauthenticated NOTIFY changed)
 
  public:
   explicit SessionStatus(QObject* parent = nullptr) : QObject(parent) {}
@@ -23,6 +24,7 @@ class SessionStatus final : public QObject, public rcbackend::IBackendObserver {
   QString stateLabel() const { return stateLabel_; }
   QString detail() const { return detail_; }
   bool streaming() const { return streaming_; }
+  bool unauthenticated() const { return unauthenticated_; }
 
   void onBackendEvent(const std::string& kind, const std::string& detail) override;
 
@@ -35,6 +37,10 @@ class SessionStatus final : public QObject, public rcbackend::IBackendObserver {
   QString stateLabel_ = QStringLiteral("Waiting for iPhone");
   QString detail_ = QStringLiteral("No phone is connected to the receiver.");
   bool streaming_ = false;
+  // Sticky for the life of the connection: the backend announces the skipped
+  // authentication once, before ready, but the user needs to see it for the whole session.
+  bool unauthenticated_ = false;
+  QString peer_;
 };
 
 }  // namespace rcapp

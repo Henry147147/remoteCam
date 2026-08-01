@@ -65,7 +65,11 @@ HRESULT BonjourService::start(uint16_t port, const std::wstring& displayName,
   if (advertising_) return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS);
 
   const std::wstring instanceName = displayName + L"._remotecam._tcp.local";
-  const std::wstring hostName = displayName;
+  // The SRV target must be an mDNS name. Windows accepts a bare computer name here and
+  // publishes it verbatim, so the record looks healthy from a Windows browser -- which
+  // only reads PTR -- while iOS, which has no LLMNR or NetBIOS, cannot resolve it and
+  // drops the service. Measured: target 'HENRYDESKTOP' instead of 'HENRYDESKTOP.local'.
+  const std::wstring hostName = displayName + L".local";
 
   std::array<PCWSTR, 4> keys = {L"v", L"name", L"id", L"caps"};
   std::array<PCWSTR, 4> values = {kProtocolVersion, displayName.c_str(), serviceId.c_str(),

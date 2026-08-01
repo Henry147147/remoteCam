@@ -37,6 +37,21 @@ class TestTrust final : public rcbackend::ITrustPolicy {
   std::string lastId;
 };
 
+// Mirrors rcapp::SecurityPolicy: the PC's own preference plus the phone's, never either
+// alone. The shipping implementation lives in windows/app, so this restates the contract
+// the backend has to enforce rather than importing it.
+class MutualOptOutTrust final : public rcbackend::ITrustPolicy {
+ public:
+  explicit MutualOptOutTrust(bool allow) : allow_(allow) {}
+  bool trusted(const rc::control::Hello& hello) override {
+    return allow_ && hello.allowUnauthenticated;
+  }
+  bool allowsUnauthenticated() const override { return allow_; }
+
+ private:
+  bool allow_ = false;
+};
+
 class MarkerProtector final : public rcsecurity::ISessionProtector {
  public:
   uint64_t expiresUnixSeconds() const override { return 4102444800ull; }
@@ -317,6 +332,81 @@ void testProductionBoundary() {
   listener.stop();
   check(result.passed, "production controller reports paired=false and withholds ready");
   check(controller.metrics().videoFrames == 0, "no media crosses the rejected trust policy");
+}
+
+// Both ends must opt in. The three combinations below are the whole contract: the phone
+// cannot authorize itself, the PC cannot force a phone that asked to be authenticated,
+// and only the agreed case skips straight to ready.
+void testUnauthenticatedOptOut() {
+  std::printf("Mutual unauthenticated opt-out\n");
+
+  struct Case {
+    bool pcAllows;
+    bool phoneAsks;
+    bool expectReady;
+    const char* what;
+  };
+  const Case cases[] = {
+      {true, true, true, "both ends opt in"},
+      {true, false, false, "PC offers the downgrade but the phone did not ask"},
+      {false, true, false, "phone asks but the PC refuses"},
+  };
+
+  for (const Case& scenario : cases) {
+    MutualOptOutTrust trust(scenario.pcAllows);
+    RecordingObserver observer;
+    rcbackend::SessionConfig config;
+    config.serviceId = "0123456789abcdef";
+    rcbackend::SessionController controller(config, trust, nullptr, &observer);
+    rcnet::TcpListener listener;
+    check(SUCCEEDED(listener.start(0, &controller, true)),
+          std::string("listener starts: ") + scenario.what);
+
+    rcnet::TcpClient phone;
+    check(SUCCEEDED(phone.connect("127.0.0.1", listener.boundPort())),
+          std::string("phone connects: ") + scenario.what);
+    check(SUCCEEDED(sendControl(
+              phone, rc::control::hello("Opt-out iPhone", "0123456789abcdef", "iPhone",
+                                        {"h264", "hevc"}, "ios", scenario.phoneAsks))),
+          std::string("phone sends hello: ") + scenario.what);
+
+    rc::control::Message message;
+    bool advertised = false;
+    bool paired = true;
+    check(receiveControl(phone, message) && message.type == "server_info" &&
+              message.boolean("allow_unauthenticated", advertised) &&
+              advertised == scenario.pcAllows && message.boolean("paired", paired) && !paired,
+          std::string("server_info states the PC preference and stays unpaired: ") +
+              scenario.what);
+
+    // A short window: ready is sent immediately after server_info or not at all, so this
+    // is not a race with the ten-second trust deadline.
+    const bool gotReady = receiveControl(phone, message, 400) && message.type == "ready";
+    check(gotReady == scenario.expectReady,
+          std::string(scenario.expectReady ? "ready follows server_info: "
+                                           : "ready is withheld: ") +
+              scenario.what);
+    check(waitUntil([&] {
+            return controller.metrics().trusted == scenario.expectReady &&
+                   controller.metrics().state ==
+                       (scenario.expectReady ? rcbackend::State::Ready
+                                             : rcbackend::State::AwaitingTrust);
+          }),
+          std::string("trust state matches the negotiation: ") + scenario.what);
+    // session.state is notified after security.unauthenticated, so waiting for it makes
+    // the absent case a real assertion rather than a lost race.
+    check(waitUntil([&] {
+            return observer.contains(scenario.expectReady ? "session.state:ready"
+                                                          : "session.state:awaiting_trust");
+          }),
+          std::string("observer reaches the negotiated checkpoint: ") + scenario.what);
+    check(observer.contains("security.unauthenticated") == scenario.expectReady,
+          std::string("the skipped authentication is announced exactly when it happens: ") +
+              scenario.what);
+
+    phone.close();
+    listener.stop();
+  }
 }
 
 void testAuthenticatedSecurityBoundary() {
@@ -730,6 +820,7 @@ int main() {
   std::setvbuf(stdout, nullptr, _IONBF, 0);
   testTrustedWalkingSkeleton();
   testProductionBoundary();
+  testUnauthenticatedOptOut();
   testAuthenticatedSecurityBoundary();
   testBoundedQueueRecovery();
   testHelloTimeout();

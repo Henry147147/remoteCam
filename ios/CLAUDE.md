@@ -80,9 +80,19 @@ The sanitized sample is in `../docs/testing/log-samples/2026-07-30-ios-device.lo
 This does not verify capture, encode, background operation, thermals, or live video.
 
 Production pairing, authenticated control/media encryption, and USB remain blocked
-by underspecified shared protocol decisions. Release rejects unauthenticated
-`ready`; a Debug-only `--allow-insecure-session` launch argument exists solely for
-the fake-PC development harness. See `../docs/ios-backend-handoff.md`.
+by underspecified shared protocol decisions. Release rejects an unauthenticated
+`ready` unless the user has enabled "Allow connecting without pairing" here *and* the
+PC reported the same in `server_info` — see the mutual opt-out in
+`../docs/protocol.md`. That is a shipping setting; the separate Debug-only
+`--allow-insecure-session` launch argument still exists solely for the fake-PC
+development harness. See `../docs/ios-backend-handoff.md`.
+
+**Unbuilt:** `SecuritySettings`, the `hello` opt-out field, the session negotiation,
+and the `RootView` Security section were written from the Windows host, which has no
+Xcode. `project.pbxproj` was hand-edited to add `Sources/Storage/SecuritySettings.swift`
+(app + test targets) and `RemoteCamTests/SecuritySettingsTests.swift`; re-running
+`Tools/generate_project.rb` would also pick both up. Compile and run the suite before
+trusting any of it.
 
 ## Verification
 

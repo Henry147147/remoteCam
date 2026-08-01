@@ -44,6 +44,10 @@ class BonjourAdvertiser final : public QObject {
   quint16 port() const { return kDefaultPort; }
 
   void start();
+  // Registration happens once at launch, so a PC that joins Wi-Fi afterwards -- or whose
+  // adapter changed -- is advertising on a link nobody is listening on. The user has no
+  // other way to republish short of restarting the app.
+  Q_INVOKABLE void restart();
   // Keeps the discovery card truthful when bind/listen fails. The caller must not
   // call start() after this without first constructing a new receiver.
   void setReceiverFailure(const QString& detail);
@@ -60,8 +64,14 @@ class BonjourAdvertiser final : public QObject {
 
   static void WINAPI registrationComplete(DWORD status, void* queryContext,
                                            PDNS_SERVICE_INSTANCE instance);
+  static void WINAPI deregistrationComplete(DWORD status, void* queryContext,
+                                             PDNS_SERVICE_INSTANCE instance);
   void finishRegistration(DWORD status);
   void setFailure(QString detail);
+  void deregister();
+
+  QString instanceName_;
+  QString hostName_;
 
   AdvertisementState state_ = AdvertisementState::WaitingForReceiver;
   QString statusDetail_ = QStringLiteral(

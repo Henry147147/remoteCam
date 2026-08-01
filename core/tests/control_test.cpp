@@ -207,12 +207,25 @@ void testPcToPhoneMessages() {
   check(ok && preview.boolean("enabled", enabled) && !enabled, "set_preview carries a bool");
 
   Message info = roundTrip(rc::control::serverInfo("Desk PC", "0123456789abcdef", false,
-                                                   {"h264", "hevc"}), ok);
+                                                   false, {"h264", "hevc"}), ok);
   bool paired = true;
   check(ok && info.boolean("paired", paired) && !paired, "server_info reports pairing state");
   uint64_t version = 0;
   check(info.unsignedInt("v", version) && version == rc::control::kProtocolVersion,
         "server_info announces the protocol version");
+
+  // Pairing state and the unauthenticated opt-out are independent: a PC that allows the
+  // downgrade is still unpaired, and the phone has to be able to tell those apart to say
+  // which end is refusing.
+  bool allowUnauthenticated = true;
+  check(info.boolean("allow_unauthenticated", allowUnauthenticated) && !allowUnauthenticated,
+        "server_info reports a withheld pairing downgrade");
+  Message openInfo = roundTrip(rc::control::serverInfo("Desk PC", "0123456789abcdef", false,
+                                                       true, {"h264"}), ok);
+  allowUnauthenticated = false;
+  check(ok && openInfo.boolean("allow_unauthenticated", allowUnauthenticated) &&
+            allowUnauthenticated && openInfo.boolean("paired", paired) && !paired,
+        "server_info can offer the downgrade while still unpaired");
 }
 
 void testSetControlIsSparse() {
@@ -282,6 +295,22 @@ void testPhoneToPcParsing() {
   extraHello.fields.insert_or_assign("future", Value::boolean(true));
   check(!rc::control::parseHello(extraHello, parsed),
         "a known v1 message rejects unexpected fields");
+
+  // The pairing opt-out is additive: the hello above predates it and must still parse,
+  // and its absence has to read as "did not ask" rather than as an unset bool.
+  check(!parsed.allowUnauthenticated, "a hello without the opt-out does not request it");
+  Message optIn = helloBack;
+  optIn.fields.insert_or_assign("allow_unauthenticated", Value::boolean(true));
+  check(rc::control::parseHello(roundTrip(optIn, ok), parsed) && ok &&
+            parsed.allowUnauthenticated,
+        "hello carries the unauthenticated opt-out");
+  // A malformed value denies rather than rejecting the whole identity: same direction as
+  // absence, so a buggy client loses the downgrade instead of losing the connection.
+  Message malformedOptIn = helloBack;
+  malformedOptIn.fields.insert_or_assign("allow_unauthenticated", Value::text("yes"));
+  check(rc::control::parseHello(roundTrip(malformedOptIn, ok), parsed) && ok &&
+            !parsed.allowUnauthenticated,
+        "a non-boolean opt-out is treated as withheld");
 
   Message orientation;
   orientation.type = "orientation";
@@ -358,6 +387,14 @@ void testPhoneToPcBuilders() {
   check(parsedHello.deviceName == "Emulated iPhone" && parsedHello.platform == "ios" &&
             parsedHello.supports("hevc"),
         "hello builder matches the iOS identity shape");
+  check(!parsedHello.allowUnauthenticated, "hello builder withholds the opt-out by default");
+
+  const Message openHello = roundTrip(
+      rc::control::hello("Emulated iPhone", "0123456789abcdef", "iPhone", {"h264"}, "ios", true),
+      ok);
+  check(ok && rc::control::parseHello(openHello, parsedHello) &&
+            parsedHello.allowUnauthenticated,
+        "hello builder round-trips an explicit opt-out");
 
   check(roundTrip(rc::control::streamStart(), ok).type == "stream_start",
         "stream_start builder has the expected type");

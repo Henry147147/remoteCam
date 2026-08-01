@@ -20,6 +20,7 @@
 		4359908447076906FC00BA98 /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63EA1CC6EEE1B27238B25A24 /* BonjourBrowser.swift */; };
 		43C7F832466D0DC935615007 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C10F21C6AF5160689872F91 /* RootView.swift */; };
 		454E660AEFF6DA9C002DDE97 /* RecentHostsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79E425BC986C1B15D06DB46 /* RecentHostsStoreTests.swift */; };
+		B1C2D3E4F5A60718293A4B61 /* SecuritySettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A60718293A4B60 /* SecuritySettingsTests.swift */; };
 		49D539D3267B64B95AC10F9D /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5FE31513008BC0DA44C55A9 /* DeviceIdentity.swift */; };
 		578C5DEBD443D57ABEFB2161 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF4947A8CD76BCDE90DCB5E /* LiveActivityController.swift */; };
 		57C02783042C85B6920E25E3 /* StreamConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A76155CCA01E252D9A1EC49 /* StreamConfiguration.swift */; };
@@ -43,9 +44,11 @@
 		C3F4CA1B04A0022937A55991 /* WireFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FDF0654E5C442EAAC2F6560 /* WireFrameTests.swift */; };
 		C5784C12159469788D4CD79C /* RemoteCamActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5F1B2C22F134EA8B88845432 /* RemoteCamActivity.appex */; };
 		CB22FCEB1183B1F4F42DDD2A /* RecentHostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A398A1DAC0A6FE6D736D964 /* RecentHostsStore.swift */; };
+		B1C2D3E4F5A60718293A4B5F /* SecuritySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A60718293A4B5E /* SecuritySettings.swift */; };
 		CC443B7F16D5B44DB8FFB377 /* ManualConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31B23A6DC444092258B09C7 /* ManualConnectionView.swift */; };
 		D3D06FE53D82BC5F8B19BA81 /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4394FE7B9FB089AB0D253A4F /* CameraPreview.swift */; };
 		DD5EE9B63C672AF9388CEF75 /* RecentHostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E03392B25344AEC6F9D22843 /* RecentHostsStore.swift */; };
+		B1C2D3E4F5A60718293A4B5D /* SecuritySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A60718293A4B5C /* SecuritySettings.swift */; };
 		E0227209218A185C6505EF34 /* RemoteHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 962A5D724652EF432C819284 /* RemoteHost.swift */; };
 		F6C1F37BBF2EA71C2D6933F2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CE0EBB341F858DC7E693740C /* Assets.xcassets */; };
 		F8505AC32585FD3328692C37 /* DeviceTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DBDAF963F0159BFEBB19CD4 /* DeviceTelemetry.swift */; };
@@ -89,6 +92,7 @@
 		282F9A1650390361BEFBCB63 /* DeviceIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceIdentity.swift; path = RemoteCam/Sources/Storage/DeviceIdentity.swift; sourceTree = "<group>"; };
 		2940A7681C0C58E155ED76F9 /* CBOR.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBOR.swift; path = RemoteCam/Sources/Wire/CBOR.swift; sourceTree = "<group>"; };
 		2A398A1DAC0A6FE6D736D964 /* RecentHostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStore.swift; path = RemoteCam/Sources/Storage/RecentHostsStore.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5A60718293A4B5E /* SecuritySettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SecuritySettings.swift; path = RemoteCam/Sources/Storage/SecuritySettings.swift; sourceTree = "<group>"; };
 		32019EBFA82C6F773E95F93F /* CameraControlsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraControlsView.swift; path = RemoteCam/Sources/UI/CameraControlsView.swift; sourceTree = "<group>"; };
 		408EA7CA92A35B2023912A99 /* CameraController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraController.swift; path = RemoteCam/Sources/Capture/CameraController.swift; sourceTree = "<group>"; };
 		4394FE7B9FB089AB0D253A4F /* CameraPreview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CameraPreview.swift; path = RemoteCam/Sources/UI/CameraPreview.swift; sourceTree = "<group>"; };
@@ -112,6 +116,7 @@
 		8A76155CCA01E252D9A1EC49 /* StreamConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamConfiguration.swift; path = RemoteCam/Sources/Models/StreamConfiguration.swift; sourceTree = "<group>"; };
 		962A5D724652EF432C819284 /* RemoteHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteHost.swift; path = RemoteCam/Sources/Models/RemoteHost.swift; sourceTree = "<group>"; };
 		A79E425BC986C1B15D06DB46 /* RecentHostsStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStoreTests.swift; path = RemoteCamTests/RecentHostsStoreTests.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5A60718293A4B60 /* SecuritySettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SecuritySettingsTests.swift; path = RemoteCamTests/SecuritySettingsTests.swift; sourceTree = "<group>"; };
 		AD12DB6C1EFFD92D3F7167AC /* CBORTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CBORTests.swift; path = RemoteCamTests/CBORTests.swift; sourceTree = "<group>"; };
 		AE5A606210703AC7B28024D3 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		B31B23A6DC444092258B09C7 /* ManualConnectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ManualConnectionView.swift; path = RemoteCam/Sources/UI/ManualConnectionView.swift; sourceTree = "<group>"; };
@@ -123,6 +128,7 @@
 		D38C2A53FE57F12F85823947 /* RemoteCamApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamApp.swift; path = RemoteCam/Sources/App/RemoteCamApp.swift; sourceTree = "<group>"; };
 		D5FE31513008BC0DA44C55A9 /* DeviceIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DeviceIdentity.swift; path = RemoteCam/Sources/Storage/DeviceIdentity.swift; sourceTree = "<group>"; };
 		E03392B25344AEC6F9D22843 /* RecentHostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecentHostsStore.swift; path = RemoteCam/Sources/Storage/RecentHostsStore.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5A60718293A4B5C /* SecuritySettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SecuritySettings.swift; path = RemoteCam/Sources/Storage/SecuritySettings.swift; sourceTree = "<group>"; };
 		E49058441D88AB23C7666F5A /* RemoteCamActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteCamActivityAttributes.swift; path = RemoteCam/Sources/Activity/RemoteCamActivityAttributes.swift; sourceTree = "<group>"; };
 		FC884AD0E93CE16B7423C35B /* RemoteCamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemoteCamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF9A2EDD9117914637860500 /* WireFrame.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WireFrame.swift; path = RemoteCam/Sources/Wire/WireFrame.swift; sourceTree = "<group>"; };
@@ -190,6 +196,7 @@
 				6ECB7F916373206876EE4BCC /* RemoteCamSession.swift */,
 				D5FE31513008BC0DA44C55A9 /* DeviceIdentity.swift */,
 				E03392B25344AEC6F9D22843 /* RecentHostsStore.swift */,
+				B1C2D3E4F5A60718293A4B5C /* SecuritySettings.swift */,
 				6DBDAF963F0159BFEBB19CD4 /* DeviceTelemetry.swift */,
 				32019EBFA82C6F773E95F93F /* CameraControlsView.swift */,
 				4394FE7B9FB089AB0D253A4F /* CameraPreview.swift */,
@@ -212,6 +219,7 @@
 				AD12DB6C1EFFD92D3F7167AC /* CBORTests.swift */,
 				CCD696B404AA60488592FBC6 /* ControlMessageTests.swift */,
 				A79E425BC986C1B15D06DB46 /* RecentHostsStoreTests.swift */,
+				B1C2D3E4F5A60718293A4B60 /* SecuritySettingsTests.swift */,
 				5EFBCA8EFFBC825D2FF2D31A /* VideoEncoderTests.swift */,
 				5FDF0654E5C442EAAC2F6560 /* WireFrameTests.swift */,
 				06977042B99BEB5ED2C1D584 /* VideoEncoder.swift */,
@@ -220,6 +228,7 @@
 				8A76155CCA01E252D9A1EC49 /* StreamConfiguration.swift */,
 				282F9A1650390361BEFBCB63 /* DeviceIdentity.swift */,
 				2A398A1DAC0A6FE6D736D964 /* RecentHostsStore.swift */,
+				B1C2D3E4F5A60718293A4B5E /* SecuritySettings.swift */,
 				09454C194589A8910A30964D /* CBOR.swift */,
 				763520A9D8FE13CCE58512F7 /* ControlMessage.swift */,
 				4758FF52CD1F773ED9EAC9BF /* WireFrame.swift */,
@@ -388,6 +397,7 @@
 				AED70B226066CD5476FADBF7 /* CBORTests.swift in Sources */,
 				FF4A866D512C4938D818BD65 /* ControlMessageTests.swift in Sources */,
 				454E660AEFF6DA9C002DDE97 /* RecentHostsStoreTests.swift in Sources */,
+				B1C2D3E4F5A60718293A4B61 /* SecuritySettingsTests.swift in Sources */,
 				AAB189EC777E5557B7B0D9F1 /* VideoEncoderTests.swift in Sources */,
 				C3F4CA1B04A0022937A55991 /* WireFrameTests.swift in Sources */,
 				FD9047196D967BFDBD0236CC /* VideoEncoder.swift in Sources */,
@@ -396,6 +406,7 @@
 				57C02783042C85B6920E25E3 /* StreamConfiguration.swift in Sources */,
 				7F289683BB7FAF08E9F984D6 /* DeviceIdentity.swift in Sources */,
 				CB22FCEB1183B1F4F42DDD2A /* RecentHostsStore.swift in Sources */,
+				B1C2D3E4F5A60718293A4B5F /* SecuritySettings.swift in Sources */,
 				29AF851B4E82509745CC7D5F /* CBOR.swift in Sources */,
 				3856BED8C769EB426709270A /* ControlMessage.swift in Sources */,
 				80B8D979EBFE6B43EBDDFAAF /* WireFrame.swift in Sources */,
@@ -420,6 +431,7 @@
 				A5AD8DB695D2CB413B343B0B /* RemoteCamSession.swift in Sources */,
 				49D539D3267B64B95AC10F9D /* DeviceIdentity.swift in Sources */,
 				DD5EE9B63C672AF9388CEF75 /* RecentHostsStore.swift in Sources */,
+				B1C2D3E4F5A60718293A4B5D /* SecuritySettings.swift in Sources */,
 				F8505AC32585FD3328692C37 /* DeviceTelemetry.swift in Sources */,
 				743FA355719F5762179680C7 /* CameraControlsView.swift in Sources */,
 				D3D06FE53D82BC5F8B19BA81 /* CameraPreview.swift in Sources */,

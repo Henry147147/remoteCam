@@ -485,7 +485,7 @@ void testReusableTcpClient() {
   rc::wire::Frame response;
   response.channel = static_cast<uint8_t>(rc::wire::Channel::Control);
   response.payload =
-      rc::control::serverInfo("Test PC", "fedcba9876543210", true, {"h264"}).encode();
+      rc::control::serverInfo("Test PC", "fedcba9876543210", true, false, {"h264"}).encode();
   check(SUCCEEDED(handler.sendFromServer(response)), "listener answers the client");
   rc::wire::Frame received;
   check(SUCCEEDED(phone.receive(received, 5000)), "client reassembles the response");

@@ -90,8 +90,12 @@ around it.
 - **C++20 core + Qt 6 / QML** for the Windows UI.
 - **ONNX Runtime + DirectML** fallback so AMD/Intel users get the same effects as
   RTX users. Effects are never vendor-exclusive in the UI.
-- **Pairing required; stream encryption optional (default off).** The control
-  channel is *always* HMAC-authenticated regardless of that toggle.
+- **Pairing required, with a mutual unauthenticated opt-out; stream encryption
+  optional (default off).** In a paired session the control channel is *always*
+  HMAC-authenticated regardless of that toggle. Both apps also expose an "allow
+  connecting without pairing" setting, default **on** while pairing is unimplemented;
+  the handshake skips authentication only when *both* peers have it enabled, and both
+  UIs say so while such a session is live. See `docs/protocol.md`.
 - **Multi-phone → multi-camera is post-v1.** Keep the architecture from foreclosing
   it; do not build it.
 
@@ -226,9 +230,11 @@ The dual-stack app listener binds TCP 7890 before advertising Bonjour, accepts o
 phone with `TCP_NODELAY`, and uses the shared wire/control codecs. `rcwin-backend`
 owns the auth-gated session states, hello/progress/idle timeouts, bounded 8-AU/20-MiB encoded
 queue, keyframe recovery, metrics, and observer/consumer seams shared by the app and
-tests. The production app responds to `hello` with `paired: false` and intentionally
-withholds `ready`; it never opens an unauthenticated streaming session. Debug
-`rc-fakepc --allow-insecure-session` remains the iOS walking skeleton.
+tests. The production app responds to `hello` with `paired: false` and withholds
+`ready` unless the mutual unauthenticated opt-out is enabled on both peers, in which
+case `rcapp::SecurityPolicy` grants trust and the UI labels the session as
+unauthenticated. Debug `rc-fakepc --allow-insecure-session` remains the iOS walking
+skeleton.
 `rc-fakephone` is the external TCP iPhone emulator: phone-side CBOR, camera profiles,
 telemetry/control echoes, synthetic/replayed Annex-B, PCG32 chaos, scenarios,
 NDJSON/JUnit, and real loopback integration are automated. `RemoteCam-E2E.exe` uses
@@ -251,8 +257,11 @@ iPhone 17 Pro Max: startup camera authorization/enumeration and the Wi-Fi
 `hello` / `server_info` exchange with Windows were observed. The run stopped at the
 expected production pairing gate; capture, encoding, and live video remain
 unverified. Secure pairing, authenticated control/media encryption, and USB are
-blocked on the joint decisions listed in `docs/ios-backend-handoff.md`; Release
-rejects unauthenticated streaming.
+blocked on the joint decisions listed in `docs/ios-backend-handoff.md`. Release
+rejects an unauthenticated `ready` unless the user has enabled the pairing opt-out
+here *and* the PC reported the same in `server_info`. **None of the iOS changes for
+that opt-out have been compiled** — they were written from the Windows host, which has
+no Xcode.
 
 **Installer packaged locally, elevated install still unverified.**
 `RemoteCam-0.1.0-win64.exe` was generated with CPack + NSIS, its archive integrity
@@ -266,6 +275,12 @@ production decoder/transform output to the frame ring, USB, effects, OBS, record
 live Qt preview/full controls, and physical iPhone/Windows/GPU verification. A native
 desktop audit has run, but correct displayed phone video cannot pass until the preview
 exists; do not infer video correctness from the E2E wire-state pass.
+
+**Bonjour advertising fixed, phone-side discovery still unverified.** Both advertisers
+published an SRV target of `<computer>` rather than `<computer>.local`, so the record
+registered cleanly and browsed fine from Windows — which reads only PTR — while iOS
+could not resolve it. Measured on the wire before and after; the chain now resolves
+PTR → SRV `<computer>.local:7890` → A. An iPhone has not yet confirmed it.
 
 Next: settle and implement the shared security contract, join the tested receive
 seams into an authenticated end-to-end path, then run the M1 and physical-device

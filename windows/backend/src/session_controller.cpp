@@ -528,10 +528,14 @@ void SessionController::handleHello(rcnet::Connection& connection,
   }
   bool trusted = false;
   bool paired = false;
+  bool allowUnauthenticated = false;
   std::optional<rcsecurity::AuthenticationChallenge> challenge;
   if (trustPolicy_ != nullptr) {
+    allowUnauthenticated = trustPolicy_->allowsUnauthenticated();
     trusted = trustPolicy_->trusted(parsed);
-    paired = trusted;
+    // Trust granted with no authenticated identity behind it. `paired` stays a statement
+    // about a stored pairing record, so it must not be conflated with this.
+    paired = trusted && !allowUnauthenticated;
   } else if (sessionSecurity_ != nullptr) {
     rcsecurity::AuthenticationChallenge generated;
     const rcsecurity::Error securityError = sessionSecurity_->beginAuthentication(
@@ -556,9 +560,10 @@ void SessionController::handleHello(rcnet::Connection& connection,
     if (trusted) readyAt_ = now;
   }
 
-  const HRESULT infoHr = sendControl(
-      connection,
-      rc::control::serverInfo(config_.serverName, config_.serviceId, paired, {"h264", "hevc"}));
+  const HRESULT infoHr =
+      sendControl(connection, rc::control::serverInfo(config_.serverName, config_.serviceId,
+                                                      paired, allowUnauthenticated,
+                                                      {"h264", "hevc"}));
   if (FAILED(infoHr)) {
     notify("handshake.failure", "could not send server_info");
     protocolFailure(connection, "server_info send failed");
@@ -581,6 +586,11 @@ void SessionController::handleHello(rcnet::Connection& connection,
       protocolFailure(connection, "ready send failed");
       return;
     }
+  }
+  // Emitted before session.state so the UI settles on the downgrade wording rather than
+  // briefly claiming an authenticated session it never had.
+  if (trusted && allowUnauthenticated) {
+    notify("security.unauthenticated", parsed.deviceName + " (" + parsed.deviceId + ")");
   }
   notify("session.state", stateName(trusted ? State::Ready : State::AwaitingTrust));
 }

@@ -18,6 +18,9 @@
 #include "live_media_pipeline.h"
 #include "preview_provider.h"
 #endif
+#if !defined(RC_APP_E2E_HOST)
+#include "security_policy.h"
+#endif
 #include "session_status.h"
 #include "shell_controller.h"
 #include "phone_controller.h"
@@ -113,9 +116,10 @@ int main(int argc, char* argv[]) {
   rcapp::ShellController shellController(producer, true);
 #endif
 #if defined(RC_APP_E2E_HOST)
+  // Unconditional, so the desktop harness never depends on a user setting.
   InsecureE2ETrustPolicy trustPolicy;
 #else
-  rcbackend::RejectingTrustPolicy trustPolicy;
+  rcapp::SecurityPolicy trustPolicy;
 #endif
   rcbackend::SessionConfig sessionConfig;
   sessionConfig.serverName = discovery.computerName().toStdString();
@@ -184,9 +188,13 @@ int main(int argc, char* argv[]) {
   engine.rootContext()->setContextProperty(QStringLiteral("shellController"), &shellController);
   engine.rootContext()->setContextProperty(QStringLiteral("phoneController"), &phoneController);
 #if defined(RC_APP_E2E_HOST)
+  // The E2E host bypasses trust unconditionally and has no user-facing setting to bind.
+  engine.rootContext()->setContextProperty(QStringLiteral("securityPolicy"),
+                                           static_cast<QObject*>(nullptr));
   engine.rootContext()->setContextProperty(QStringLiteral("appE2EMode"), true);
   const QUrl mainUrl(QStringLiteral("qrc:/qml/Main.qml"));
 #else
+  engine.rootContext()->setContextProperty(QStringLiteral("securityPolicy"), &trustPolicy);
   engine.rootContext()->setContextProperty(QStringLiteral("appE2EMode"), false);
   const QUrl mainUrl(QStringLiteral("qrc:/RemoteCam/qml/Main.qml"));
 #endif

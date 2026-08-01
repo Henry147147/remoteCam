@@ -102,8 +102,11 @@ StreamConfig conservativeDefault();
 // ---------------------------------------------------------------------------
 // PC -> phone
 
+// `allowUnauthenticated` is this PC's standing preference, not a property of the
+// connection: the phone needs it even when it did not opt in itself, so it can name
+// which end is refusing rather than reporting a generic stall.
 Message serverInfo(const std::string& name, const std::string& id, bool paired,
-                   const std::vector<std::string>& caps);
+                   bool allowUnauthenticated, const std::vector<std::string>& caps);
 Message ready(const StreamConfig& config);
 // The generation-bearing form is required for live reconfiguration. The legacy
 // overload remains for protocol fixtures that only inspect the config shape; a
@@ -162,9 +165,12 @@ Message stats(const Stats& stats);
 // the shared protocol library makes the Windows phone emulator byte-for-byte
 // compatible with the shipping client instead of maintaining a second collection of
 // ad-hoc CBOR maps in the test tool.
+// `allowUnauthenticated` is defaulted where serverInfo's equivalent is not: omitting it
+// here yields false, which only ever withholds the pairing downgrade. Omitting the PC's
+// side would instead hide a granted downgrade from the phone, so that one stays explicit.
 Message hello(const std::string& deviceName, const std::string& deviceId,
               const std::string& model, const std::vector<std::string>& caps,
-              const std::string& platform = "ios");
+              const std::string& platform = "ios", bool allowUnauthenticated = false);
 Message streamStart();
 
 struct AuthResponse {
@@ -199,6 +205,10 @@ struct Hello {
   std::string platform;
   std::string model;
   std::vector<std::string> caps;
+  // The phone's opt-in to skipping pairing. It is a request, never a grant: the PC
+  // still has to allow it too, so a hostile phone cannot authorize itself by setting
+  // this. Absent means false, so an older client can never accidentally opt in.
+  bool allowUnauthenticated = false;
 
   bool supports(const std::string& capability) const;
 };

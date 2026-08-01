@@ -28,6 +28,14 @@ QString loadComputerName() {
   return QStringLiteral("Windows PC");
 }
 
+// The bare DWORD that DnsServiceRegister returns is the only clue anyone gets when
+// discovery silently does not work, and it was previously printed as a decimal number.
+QString registrationError(DWORD status) {
+  return QStringLiteral("Windows DNS-SD registration failed: %1 (0x%2).")
+      .arg(QString::fromStdWString(rcwin::hrMessage(HRESULT_FROM_WIN32(status))))
+      .arg(status, 8, 16, QLatin1Char('0'));
+}
+
 QString loadOrCreateServiceID() {
   QSettings settings;
   const QRegularExpression validID(QStringLiteral("^[0-9a-f]{16}$"));
@@ -99,9 +107,13 @@ void BonjourAdvertiser::start() {
                       .arg(kDefaultPort);
   emit stateChanged();
 
-  const std::wstring instanceName =
-      QStringLiteral("%1._remotecam._tcp.local").arg(computerName_).toStdWString();
-  const std::wstring hostName = computerName_.toStdWString();
+  instanceName_ = QStringLiteral("%1._remotecam._tcp.local").arg(computerName_);
+  // Must end in .local: see the note in rcnet::BonjourService::start. A bare computer
+  // name registers successfully and browses fine from Windows, but no iPhone can resolve
+  // it, which is indistinguishable from the PC never advertising at all.
+  hostName_ = QStringLiteral("%1.local").arg(computerName_);
+  const std::wstring instanceName = instanceName_.toStdWString();
+  const std::wstring hostName = hostName_.toStdWString();
   const std::wstring displayName = computerName_.toStdWString();
   const std::wstring stableID = serviceID_.toStdWString();
 
@@ -141,13 +153,51 @@ void BonjourAdvertiser::start() {
   const DWORD result = ::DnsServiceRegister(&request_, &cancel_);
   if (result != DNS_REQUEST_PENDING) {
     callbackPending_ = false;
-    setFailure(QStringLiteral("Windows DNS-SD registration failed with error %1.").arg(result));
+    setFailure(registrationError(result));
     ::DnsServiceFreeInstance(instance_);
     instance_ = nullptr;
     ::CloseHandle(context_->callbackComplete);
     delete context_;
     context_ = nullptr;
   }
+}
+
+void BonjourAdvertiser::restart() {
+  if (callbackPending_) return;
+  // Nothing but a de-register removes the old record; Windows otherwise keeps it until
+  // the process exits, so a plain re-register would leave two instances on the link.
+  if (state_ == AdvertisementState::Advertising) deregister();
+  if (state_ == AdvertisementState::TestLoopback) return;
+  state_ = AdvertisementState::WaitingForReceiver;
+  start();
+}
+
+void BonjourAdvertiser::deregister() {
+  const std::wstring instanceName = instanceName_.toStdWString();
+  const std::wstring hostName = hostName_.toStdWString();
+  PDNS_SERVICE_INSTANCE instance = ::DnsServiceConstructInstance(
+      instanceName.c_str(), hostName.c_str(), nullptr, nullptr, kDefaultPort, 0, 0, 0,
+      nullptr, nullptr);
+  if (!instance) return;
+
+  DNS_SERVICE_REGISTER_REQUEST request{};
+  request.Version = DNS_QUERY_REQUEST_VERSION1;
+  request.InterfaceIndex = 0;
+  request.pServiceInstance = instance;
+  // Best-effort withdrawal immediately followed by a fresh registration: we do not wait
+  // for it, because blocking the UI thread on the DNS client would be worse than a stale
+  // record the re-registration overwrites. The callback still has to exist and free what
+  // Windows hands it, so it owns no advertiser state and cannot outlive anything.
+  request.pRegisterCompletionCallback = &BonjourAdvertiser::deregistrationComplete;
+  request.pQueryContext = nullptr;
+  request.unicastEnabled = FALSE;
+  const DWORD status = ::DnsServiceDeRegister(&request, nullptr);
+  if (status != DNS_REQUEST_PENDING && status != ERROR_SUCCESS) {
+    RC_WARN(L"DnsServiceDeRegister(%s) returned %s", instanceName.c_str(),
+            rcwin::hrMessage(HRESULT_FROM_WIN32(status)).c_str());
+  }
+  ::DnsServiceFreeInstance(instance);
+  state_ = AdvertisementState::WaitingForReceiver;
 }
 
 void BonjourAdvertiser::setReceiverFailure(const QString& detail) {
@@ -162,6 +212,11 @@ void BonjourAdvertiser::setTestLoopback() {
       "The desktop verification host is listening on 127.0.0.1:%1 and is not advertised.")
                       .arg(kDefaultPort);
   emit stateChanged();
+}
+
+void WINAPI BonjourAdvertiser::deregistrationComplete(DWORD, void*,
+                                                      PDNS_SERVICE_INSTANCE instance) {
+  if (instance) ::DnsServiceFreeInstance(instance);
 }
 
 void WINAPI BonjourAdvertiser::registrationComplete(DWORD status, void* queryContext,
@@ -195,7 +250,7 @@ void BonjourAdvertiser::finishRegistration(DWORD status) {
   context_ = nullptr;
 
   if (status != ERROR_SUCCESS) {
-    setFailure(QStringLiteral("Windows DNS-SD registration failed with error %1.").arg(status));
+    setFailure(registrationError(status));
     return;
   }
 
@@ -204,7 +259,10 @@ void BonjourAdvertiser::finishRegistration(DWORD status) {
                                  "Manual connection remains available at the same port.")
                       .arg(computerName_)
                       .arg(kDefaultPort);
-  RC_LOG(L"Bonjour service advertised on TCP port %u with id %s", kDefaultPort,
+  // Log what was actually published, not just that publishing happened: a healthy-looking
+  // registration with the wrong SRV target is the failure mode this component has.
+  RC_LOG(L"Bonjour advertised %s -> %s:%u with id %s", instanceName_.toStdWString().c_str(),
+         hostName_.toStdWString().c_str(), kDefaultPort,
          serviceID_.toStdWString().c_str());
   emit stateChanged();
 }

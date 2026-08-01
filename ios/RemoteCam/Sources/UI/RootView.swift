@@ -19,6 +19,7 @@ struct RootView: View {
                 statusSection
                 discoveredSection
                 recentSection
+                securitySection
             }
             .navigationTitle("RemoteCam")
             .toolbar {
@@ -115,6 +116,10 @@ struct RootView: View {
         }
     }
 
+    private var securitySection: some View {
+        SecuritySection(settings: model.security)
+    }
+
     private var statusIcon: String {
         switch model.connectionPhase {
         case .idle: "iphone.gen3.radiowaves.left.and.right"
@@ -153,6 +158,24 @@ struct RootView: View {
             "\(configuration.width)×\(configuration.height) at \(configuration.framesPerSecond) fps · \(host.name)"
         case .reconnecting(let host, let attempt): "Trying \(host.name) again (\(attempt))…"
         case .failed(let message): message
+        }
+    }
+}
+
+// Its own view so the toggle observes SecuritySettings directly. Reaching through
+// AppModel would only observe AppModel, and the switch would spring back on tap.
+private struct SecuritySection: View {
+    @ObservedObject var settings: SecuritySettings
+
+    var body: some View {
+        Section {
+            Toggle("Allow connecting without pairing", isOn: $settings.allowsUnauthenticatedConnections)
+        } header: {
+            Text("Security")
+        } footer: {
+            Text(settings.allowsUnauthenticatedConnections
+                 ? "Video and controls are sent unencrypted. The RemoteCam desktop app must have the same option enabled, or it will keep waiting for pairing."
+                 : "Only paired computers may start a session. Pairing is not implemented yet, so leaving this off means no computer can connect.")
         }
     }
 }

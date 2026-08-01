@@ -164,12 +164,13 @@ StreamConfig conservativeDefault() {
 }
 
 Message serverInfo(const std::string& name, const std::string& id, bool paired,
-                   const std::vector<std::string>& caps) {
+                   bool allowUnauthenticated, const std::vector<std::string>& caps) {
   Message message = makeMessage("server_info");
   put(message.fields, "v", cbor::Value::unsignedInt(kProtocolVersion));
   put(message.fields, "name", cbor::Value::text(name));
   put(message.fields, "id", cbor::Value::text(id));
   put(message.fields, "paired", cbor::Value::boolean(paired));
+  put(message.fields, "allow_unauthenticated", cbor::Value::boolean(allowUnauthenticated));
   cbor::Array list;
   list.reserve(caps.size());
   for (const std::string& cap : caps) list.push_back(cbor::Value::text(cap));
@@ -274,13 +275,14 @@ bool Hello::supports(const std::string& capability) const {
 
 Message hello(const std::string& deviceName, const std::string& deviceId,
               const std::string& model, const std::vector<std::string>& caps,
-              const std::string& platform) {
+              const std::string& platform, bool allowUnauthenticated) {
   Message message = makeMessage("hello");
   put(message.fields, "v", cbor::Value::unsignedInt(kProtocolVersion));
   put(message.fields, "device_name", cbor::Value::text(deviceName));
   put(message.fields, "device_id", cbor::Value::text(deviceId));
   put(message.fields, "platform", cbor::Value::text(platform));
   put(message.fields, "model", cbor::Value::text(model));
+  put(message.fields, "allow_unauthenticated", cbor::Value::boolean(allowUnauthenticated));
   cbor::Array list;
   list.reserve(caps.size());
   for (const std::string& cap : caps) list.push_back(cbor::Value::text(cap));
@@ -358,8 +360,8 @@ bool validDeviceId(std::string_view value) {
 
 bool parseHello(const Message& message, Hello& out) {
   if (message.type != "hello" ||
-      !onlyFields(message.fields,
-                  {"v", "device_name", "device_id", "platform", "model", "caps"})) {
+      !onlyFields(message.fields, {"v", "device_name", "device_id", "platform", "model",
+                                   "caps", "allow_unauthenticated"})) {
     return false;
   }
   if (!message.unsignedInt("v", out.version) ||
@@ -368,6 +370,12 @@ bool parseHello(const Message& message, Hello& out) {
       !message.text("platform", out.platform) || out.platform.empty() ||
       !message.text("model", out.model) || out.model.empty()) {
     return false;
+  }
+  // Tolerated-absent: a client built before the pairing opt-out existed omits this and
+  // must still parse. Defaulting to false is the safe direction -- a missing field can
+  // only ever withhold the downgrade, never request it.
+  if (!message.boolean("allow_unauthenticated", out.allowUnauthenticated)) {
+    out.allowUnauthenticated = false;
   }
 
   out.caps.clear();

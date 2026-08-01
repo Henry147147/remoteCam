@@ -48,6 +48,26 @@ function Add-Check([string]$Name, [string]$Status, [string]$Evidence) {
     Write-Host "[$prefix] ${Name}: $Evidence"
 }
 
+# RemoteCam.exe reads security/allowUnauthenticated from QSettings, which lands in the
+# interactive user's registry. Force it for the run and put it back afterwards, so the
+# harness proves both branches without depending on -- or keeping -- a developer's choice.
+$securityKey = "HKCU:\Software\RemoteCam\RemoteCam\security"
+function Get-AllowUnauthenticated {
+    if (-not (Test-Path -LiteralPath $securityKey)) { return $null }
+    return (Get-ItemProperty -LiteralPath $securityKey -ErrorAction SilentlyContinue).allowUnauthenticated
+}
+function Set-AllowUnauthenticated($Value) {
+    if ($null -eq $Value) {
+        if (Test-Path -LiteralPath $securityKey) {
+            Remove-ItemProperty -LiteralPath $securityKey -Name allowUnauthenticated -ErrorAction SilentlyContinue
+        }
+        return
+    }
+    New-Item -Path $securityKey -Force | Out-Null
+    New-ItemProperty -LiteralPath $securityKey -Name allowUnauthenticated -Value ([int]$Value) `
+        -PropertyType DWord -Force | Out-Null
+}
+
 function Start-OwnedProcess([string]$FilePath, [string[]]$Arguments, [switch]$Visible) {
     $start = @{
         FilePath = $FilePath
@@ -231,21 +251,57 @@ try {
     Add-Check "Emulator process" $(if ($phone.ExitCode -eq 0) { "pass" } else { "fail" }) "exit=$($phone.ExitCode)"
     Close-OwnedProcess $e2e
 
+    $savedAllowUnauthenticated = Get-AllowUnauthenticated
+    Set-AllowUnauthenticated 1
+
     $production = Start-OwnedProcess -FilePath $productionExe -Arguments @("--test-loopback") -Visible
     $productionRoot = Wait-MainWindow $production
     $productionPhone = Start-OwnedProcess -FilePath $phoneExe -Arguments @(
         "run", "--connect", "127.0.0.1:7890", "--scenario", "production-lock",
         "--duration", "2", "--report-jsonl", (Join-Path $artifacts "production-lock.jsonl")
     )
+    # The PC allows the downgrade here; this phone simply never asks for it. A phone that
+    # stays silent must not be let in by the PC's own preference alone.
     Wait-AccessibleName $productionRoot "remoteCam.phoneStatusLabel" "Secure pairing required" 5000 | Out-Null
-    Add-Check "Production security boundary" "pass" "paired=false and no ready"
+    Add-Check "Production security boundary" "pass" "phone did not request the downgrade: paired=false and no ready"
     Save-WindowScreenshot $production $productionRoot "production-pairing-required.png" | Out-Null
     $productionPhone.WaitForExit(10000) | Out-Null
     Add-Check "Production-lock emulator" $(if ($productionPhone.ExitCode -eq 0) { "pass" } else { "fail" }) "exit=$($productionPhone.ExitCode)"
+
+    # The negotiated case, through the shipping executable rather than the E2E bypass:
+    # both ends opt in, so ready follows server_info and the label says what was skipped.
+    $negotiatedPhone = Start-OwnedProcess -FilePath $phoneExe -Arguments @(
+        "run", "--connect", "127.0.0.1:7890", "--scenario", "smoke", "--duration", "3",
+        "--allow-insecure-session",
+        "--report-jsonl", (Join-Path $artifacts "unauthenticated-session.jsonl")
+    )
+    Wait-AccessibleName $productionRoot "remoteCam.phoneStatusLabel" "Phone streaming, not authenticated" 8000 | Out-Null
+    Add-Check "Unauthenticated session negotiated" "pass" "both ends opted in: production host reached streaming"
+    Save-WindowScreenshot $production $productionRoot "production-unauthenticated.png" | Out-Null
+    $negotiatedPhone.WaitForExit(15000) | Out-Null
+    Add-Check "Unauthenticated emulator" $(if ($negotiatedPhone.ExitCode -eq 0) { "pass" } else { "fail" }) "exit=$($negotiatedPhone.ExitCode)"
+
+    Close-OwnedProcess $production
+
+    # And the PC's own off-switch: the same opted-in phone must be refused.
+    Set-AllowUnauthenticated 0
+    $locked = Start-OwnedProcess -FilePath $productionExe -Arguments @("--test-loopback") -Visible
+    $lockedRoot = Wait-MainWindow $locked
+    $lockedPhone = Start-OwnedProcess -FilePath $phoneExe -Arguments @(
+        "run", "--connect", "127.0.0.1:7890", "--scenario", "production-lock",
+        "--duration", "2", "--allow-insecure-session",
+        "--report-jsonl", (Join-Path $artifacts "pc-refuses-downgrade.jsonl")
+    )
+    Wait-AccessibleName $lockedRoot "remoteCam.phoneStatusLabel" "Secure pairing required" 5000 | Out-Null
+    Add-Check "PC refuses the downgrade" "pass" "option disabled: an opted-in phone is still held at pairing"
+    $lockedPhone.WaitForExit(10000) | Out-Null
 } catch {
     Add-Check "Desktop harness" "fail" $_.Exception.Message
 } finally {
     foreach ($process in $ownedProcesses) { Close-OwnedProcess $process }
+    if (Get-Variable -Name savedAllowUnauthenticated -Scope Script -ErrorAction SilentlyContinue) {
+        Set-AllowUnauthenticated $savedAllowUnauthenticated
+    }
 }
 
 $missing = @($checks | Where-Object { $_.status -eq "missing" }).Count

@@ -7,8 +7,9 @@ implementations disagree with this file, the file is right.
 Status: **partially implemented**. The 16-byte framing, deterministic CBOR,
 control/capability messages, and Annex-B validation are implemented in the portable
 C++ core and iOS client with round-trip tests. Pairing, authentication, and media
-encryption remain draft; the production Windows app therefore reports `paired:false`
-and withholds `ready` instead of starting an insecure session.
+encryption remain draft. Until they land, the only way to stream is the **mutual
+unauthenticated opt-out** below, which both apps expose as a user setting; without it
+the PC reports `paired:false` and withholds `ready`.
 
 ## Design constraints
 
@@ -121,9 +122,14 @@ a deadline. There is no unauthenticated extension namespace.
 ## Handshake
 
 ```
-phone → PC   HELLO      {v, device_name, device_id, platform, model, caps}
-PC   → phone SERVER_INFO{v, name, id, caps, paired: bool}
-             ── if not paired ──
+phone → PC   HELLO      {v, device_name, device_id, platform, model, caps,
+                         allow_unauthenticated: bool}
+PC   → phone SERVER_INFO{v, name, id, caps, paired: bool,
+                         allow_unauthenticated: bool}
+             ── if both allow_unauthenticated are true ──
+PC   → phone READY       {stream_config}      (no pairing, no authentication)
+phone → PC   STREAM_START
+             ── otherwise, if not paired ──
 PC   → phone PAIR_REQUIRED {salt: bstr16, pB: bstr65, expires}
              (PC shows a 6-digit code and a QR encoding host, port and code)
 phone → PC   PAIR_COMMIT  {pA: bstr65}
@@ -151,6 +157,31 @@ before `READY`.
 An unpaired device may complete `HELLO` and nothing else. It cannot stream, cannot
 read settings, and cannot enumerate anything about the PC beyond what the Bonjour
 TXT record already broadcasts.
+
+### The mutual unauthenticated opt-out
+
+`allow_unauthenticated` is the one exception to the paragraph above, and it is a
+deliberate user-selectable downgrade rather than a protocol weakness to be fixed.
+
+Both peers expose it as a setting. `HELLO.allow_unauthenticated` states that the phone
+is willing; `SERVER_INFO.allow_unauthenticated` states that the PC is. The PC sends
+`READY` immediately after `SERVER_INFO`, skipping pairing and authentication entirely,
+**only when both are true**. Neither flag grants anything on its own:
+
+- A phone setting the flag is an unauthenticated peer asking to be believed. A PC whose
+  own setting is off must ignore it and hold the phone at the pairing gate.
+- A PC setting the flag is an offer. A phone that did not ask must refuse a `READY` that
+  arrives without pairing, exactly as it would today.
+
+The field is absent-tolerant in both directions: a peer built before this existed omits
+it, which reads as `false`. A non-boolean value also reads as `false`. Both defaults
+withhold the downgrade, so no malformed or outdated message can open a session.
+
+Such a session has **no** control-channel HMAC and **no** media encryption. It carries
+none of the guarantees the rest of this section describes, and both apps must say so in
+their UI while it is active rather than presenting it as a normal connection. `paired`
+remains `false` throughout: it reports whether a stored pairing record authenticated
+this device, which is independent of, and never implied by, this opt-out.
 
 ### Normative pairing and session cryptography
 
@@ -238,11 +269,16 @@ cooldown; successful completion removes only that attempt's provisional charge.
 Per project decision, **media encryption is a toggle, default off** — on a trusted
 LAN the CPU and latency are better spent elsewhere.
 
-The control channel is **always** authenticated with an HMAC keyed on the long-term
-pairing key, regardless of that toggle. That is not optional: without it, anyone on
-the network could push control messages that retarget the camera, change resolution,
-or start a recording. Authentication of control and confidentiality of media are
-separate properties and only the second one is a user preference.
+In a **paired** session the control channel is **always** authenticated with an HMAC
+keyed on the long-term pairing key, regardless of that toggle. That is not optional:
+without it, anyone on the network could push control messages that retarget the camera,
+change resolution, or start a recording. Authentication of control and confidentiality
+of media are separate properties and only the second one is a user preference.
+
+A session established through the mutual unauthenticated opt-out has no long-term key,
+so it has neither property. The risk above is exactly what the user accepts by enabling
+that option on both devices; it is not something the implementation can mitigate, which
+is why both apps state it plainly rather than burying it.
 
 When the media toggle is on, video (channel 1) and statistics (channel 3) are encrypted
 with ChaCha20-Poly1305. With it off, video remains cleartext and statistics use the
@@ -258,7 +294,7 @@ types are the authenticated additive-extension policy described above.
 
 | `t` | Payload | Notes |
 |---|---|---|
-| `hello` | see handshake | |
+| `hello` | see handshake | `allow_unauthenticated` absent or non-boolean reads as `false` |
 | `auth_response` | `{client_nonce: bstr32, client_proof: bstr32}` | cleartext final authentication request |
 | `caps` | camera list, supported resolutions/fps, lens list | sent once after `ready` |
 | `orientation` | `{deg, locked}` | drives auto-rotate on the PC |
@@ -273,7 +309,7 @@ types are the authenticated additive-extension policy described above.
 
 | `t` | Payload | Notes |
 |---|---|---|
-| `server_info` | see handshake | |
+| `server_info` | see handshake | `paired` reports a stored pairing record; `allow_unauthenticated` is independent of it |
 | `auth_challenge` | `{server_nonce: bstr32, expires}` | cleartext, 10-second TTL |
 | `auth_confirm` | `{server_proof: bstr32, session_expires}` | final cleartext handshake message |
 | `ready` | `{codec, width, height, fps, bitrate}` | |

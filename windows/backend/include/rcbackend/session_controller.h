@@ -44,9 +44,13 @@ struct Metrics {
 class ITrustPolicy {
  public:
   virtual ~ITrustPolicy() = default;
-  // Legacy test-only seam. Production uses ISessionSecurity below, where a claimed
-  // identifier only selects a DPAPI record and never grants trust by itself.
+  // A policy that grants trust without ISessionSecurity is granting it without proof.
+  // Only the user-selected pairing opt-out in windows/app does that; this library
+  // deliberately ships no such implementation.
   virtual bool trusted(const rc::control::Hello& hello) = 0;
+  // This PC's standing preference, reported in server_info even to a phone that did not
+  // opt in, so the phone can say which end is refusing instead of stalling silently.
+  virtual bool allowsUnauthenticated() const { return false; }
 };
 
 class RejectingTrustPolicy final : public ITrustPolicy {

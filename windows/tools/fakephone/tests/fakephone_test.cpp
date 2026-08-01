@@ -66,7 +66,8 @@ class Harness final : public rcnet::SessionHandler {
       ++hellos_;
       sendControl(connection,
                   rc::control::serverInfo("E2E Backend", "0123456789abcdef",
-                                          !productionLock_, {"h264", "hevc"}));
+                                          !productionLock_, !productionLock_,
+                                          {"h264", "hevc"}));
       if (!productionLock_) {
         sendControl(connection, rc::control::ready(rc::control::conservativeDefault()));
       }

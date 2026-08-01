@@ -7,6 +7,7 @@ import UIKit
 final class AppModel: ObservableObject {
     let discovery = BonjourBrowser()
     let recentHosts = RecentHostsStore()
+    let security = SecuritySettings()
     let remoteSession = RemoteCamSession()
     let encoder = VideoEncoder()
     let telemetry = DeviceTelemetry()
@@ -87,6 +88,8 @@ final class AppModel: ObservableObject {
             connectionPhase = .failed("This computer no longer has a reachable network endpoint.")
             return
         }
+        // Read at connect time, not at init: the user can change it between attempts.
+        remoteSession.allowsUnauthenticatedConnections = security.allowsUnauthenticatedConnections
         remoteSession.connect(to: host, endpoint: endpoint)
     }
 

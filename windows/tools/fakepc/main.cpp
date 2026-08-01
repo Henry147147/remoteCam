@@ -231,7 +231,8 @@ class FakeSession final : public rcnet::SessionHandler {
     }
 
     sendControl(connection,
-                rc::control::serverInfo(serverName_, serviceId_, false, {"h264", "hevc"}));
+                rc::control::serverInfo(serverName_, serviceId_, false, true,
+                                        {"h264", "hevc"}));
     const rc::control::StreamConfig config = rc::control::conservativeDefault();
     codec_ = rc::annexb::Codec::H264;
     const HRESULT readyHr = sendControl(connection, rc::control::ready(config));

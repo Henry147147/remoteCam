@@ -34,15 +34,19 @@ enum ControlMessageError: Error, Equatable {
 }
 
 extension ControlMessage {
+    /// `allowUnauthenticated` asks the PC to skip pairing. It is a request, never a grant:
+    /// the PC only honours it when its own matching option is enabled, and it always
+    /// reports its answer in `server_info`.
     @MainActor
-    static func hello(deviceID: String) -> ControlMessage {
+    static func hello(deviceID: String, allowUnauthenticated: Bool) -> ControlMessage {
         ControlMessage(type: "hello", fields: [
             "v": .unsigned(1),
             "device_name": .string(UIDevice.current.name),
             "device_id": .string(deviceID),
             "platform": .string("ios"),
             "model": .string(UIDevice.current.model),
-            "caps": .array([.string("h264"), .string("hevc")])
+            "caps": .array([.string("h264"), .string("hevc")]),
+            "allow_unauthenticated": .boolean(allowUnauthenticated)
         ])
     }
 

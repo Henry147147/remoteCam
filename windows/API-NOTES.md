@@ -208,9 +208,20 @@ manual IP/port screen on iOS remains available and must use the same listener po
 The Qt app starts `TcpListener` first and calls `BonjourAdvertiser::start()` only
 after `listen()` succeeds, so it never advertises a closed endpoint. The listener
 allows one phone at a time, sets `TCP_NODELAY`, bounds framing through `rc::wire`, and
-closes malformed sessions. A production connection currently receives
-`server_info {paired:false}` and no `ready`; pairing/authentication is intentionally
-still a hard gate.
+closes malformed sessions. A production connection receives `server_info {paired:false}`
+and no `ready` unless both peers set `allow_unauthenticated`; pairing/authentication is
+otherwise still a hard gate.
+
+**The SRV target must end in `.local`.** `DnsServiceConstructInstance`'s `pHostName` is
+published verbatim, and Windows accepts a bare computer name without complaint:
+registration succeeds, the UI says "advertising", and a Windows browser finds the
+service because browsing reads only the PTR record. iOS then cannot resolve the SRV
+target — it has no LLMNR or NetBIOS — so the phone silently never lists the PC, which
+looks identical to advertising being broken. Measured on this repo before the fix:
+`SRV HENRYDESKTOP._remotecam._tcp.local -> host='HENRYDESKTOP' port=7890`. Both
+`BonjourAdvertiser` and `rcnet::BonjourService` now append `.local`. To re-measure
+without an iPhone, run `rc-fakephone discover` for the PTR and query the SRV directly;
+Windows answers per-interface, so ask from the LAN adapter, not the WSL vSwitch.
 
 TXT fields are the protocol-defined `v`, `name`, `id`, and `caps`. `id` is persisted
 with `QSettings` under the current user and is exactly 16 lowercase hexadecimal

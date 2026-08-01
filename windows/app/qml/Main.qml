@@ -262,6 +262,17 @@ ApplicationWindow {
                         font.pixelSize: 12
                     }
                 }
+
+                Button {
+                    objectName: "remoteCam.retryDiscovery"
+                    Accessible.name: "Re-advertise on the local network"
+                    Layout.alignment: Qt.AlignTop
+                    // Registration happens once at launch, so joining Wi-Fi afterwards
+                    // leaves the PC advertised on a link no phone is watching.
+                    visible: lanDiscovery.state !== 4
+                    text: "Retry"
+                    onClicked: lanDiscovery.restart()
+                }
             }
         }
 
@@ -642,6 +653,29 @@ ApplicationWindow {
         }
 
         CheckBox {
+            objectName: "remoteCam.allowUnauthenticated"
+            Accessible.name: "Allow iPhones to connect without pairing"
+            visible: !appE2EMode && securityPolicy !== null
+            text: "Allow iPhones to connect without pairing"
+            checked: securityPolicy !== null && securityPolicy.allowUnauthenticated
+            onToggled: securityPolicy.allowUnauthenticated = checked
+        }
+
+        Label {
+            objectName: "remoteCam.allowUnauthenticatedNote"
+            Accessible.name: text
+            Layout.fillWidth: true
+            Layout.leftMargin: 26
+            visible: !appE2EMode && securityPolicy !== null
+            text: securityPolicy !== null && securityPolicy.allowUnauthenticated
+                  ? "Any iPhone on this network that also has this option enabled can connect and stream. Control and video are unencrypted."
+                  : "Only paired iPhones may stream. Pairing is not implemented yet, so no phone can connect while this is unticked."
+            color: securityPolicy !== null && securityPolicy.allowUnauthenticated ? "#f6c453" : "#7888a2"
+            font.pixelSize: 12
+            wrapMode: Text.WordWrap
+        }
+
+        CheckBox {
             objectName: "remoteCam.minimizeToTray"
             Accessible.name: "Keep RemoteCam running in the system tray when closed"
             visible: !appE2EMode && shellController.trayAvailable
@@ -656,7 +690,9 @@ ApplicationWindow {
             Layout.fillWidth: true
             text: appE2EMode
                   ? "This host verifies the phone wire stream and backend state. A desktop live-preview surface is not implemented yet."
-                  : "Production accepts video only after secure pairing. Preview and every output use the same processed frame."
+                  : sessionStatus.unauthenticated
+                    ? "This session skipped pairing. Preview and every output use the same processed frame."
+                    : "Production accepts video only after pairing, or after both ends enable the option above. Preview and every output use the same processed frame."
             color: "#7888a2"
             font.pixelSize: 12
             wrapMode: Text.WordWrap

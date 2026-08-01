@@ -22,6 +22,8 @@ qt_add_executable(rc-app
     preview_provider.h
     phone_controller.cpp
     phone_controller.h
+    security_policy.cpp
+    security_policy.h
     shell_controller.cpp
     shell_controller.h
     session_status.cpp

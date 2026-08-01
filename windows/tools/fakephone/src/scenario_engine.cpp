@@ -161,11 +161,14 @@ ScenarioResult ScenarioEngine::runSession(const ScenarioOptions& options) {
   model.connected();
   reporter_.pass("transport.connect", "TCP_NODELAY client connected to " + client.peer());
 
+  // The opt-out rides on the same option that permits an unauthenticated ready below, so
+  // a scenario cannot end up accepting a session it never asked for.
   const HRESULT helloHr =
       sendControl(client, rc::control::hello(model.profile().deviceName,
                                               model.profile().deviceId,
                                               model.profile().model,
-                                              model.profile().capabilities.codecs));
+                                              model.profile().capabilities.codecs, "ios",
+                                              options.allowInsecureSession));
   if (FAILED(helloHr)) {
     reporter_.failure("handshake.hello", hrText(helloHr));
     result.protocolFailures = 1;
@@ -500,7 +503,8 @@ ScenarioResult ScenarioEngine::runChaos(const ScenarioOptions& options) {
     } else {
       const rc::control::Message hello =
           rc::control::hello(options.profile.deviceName, options.profile.deviceId,
-                             options.profile.model, options.profile.capabilities.codecs);
+                             options.profile.model, options.profile.capabilities.codecs,
+                             "ios", options.allowInsecureSession);
       if (FAILED(sendControl(client, hello))) {
         reporter_.failure("chaos.recovery", "could not send hello after the additive fault");
         ++aggregate.protocolFailures;

@@ -168,6 +168,15 @@ final class RemoteCamSession: ObservableObject {
     private var controlChannelAuthenticated = false
     private var videoSuspended = true
     private let deviceID = DeviceIdentity.loadOrCreate()
+
+    /// Set from the user's setting before each connect. Unlike the debug launch argument
+    /// below this ships in Release, because skipping pairing is a supported choice the
+    /// user makes on both devices rather than a harness bypass.
+    var allowsUnauthenticatedConnections = false
+    /// True only once the PC has reported the matching option in `server_info`. Both
+    /// halves are required, so neither device can unilaterally downgrade the session.
+    private var unauthenticatedSessionNegotiated = false
+    private var peerAllowsUnauthenticated = false
 #if DEBUG
     private let allowsInsecureDevelopmentSession = ProcessInfo.processInfo.arguments.contains("--allow-insecure-session")
 #else
@@ -182,6 +191,8 @@ final class RemoteCamSession: ObservableObject {
         self.endpoint = endpoint
         reconnectAttempt = 0
         controlChannelAuthenticated = false
+        unauthenticatedSessionNegotiated = false
+        peerAllowsUnauthenticated = false
         videoSuspended = true
         updatePhase(.connecting(host))
         transport.connect(endpoint: endpoint)
@@ -235,7 +246,8 @@ final class RemoteCamSession: ObservableObject {
         case .ready:
             RemoteCamLog.info("session", "transport ready; sending hello")
             reconnectAttempt = 0
-            sendControl(.hello(deviceID: deviceID))
+            sendControl(.hello(deviceID: deviceID,
+                               allowUnauthenticated: allowsUnauthenticatedConnections))
         case .frame(let frame):
             handle(frame)
         case .failed(let message):
@@ -258,7 +270,14 @@ final class RemoteCamSession: ObservableObject {
             )
             switch message.type {
             case "server_info":
-                if message.fields["paired"]?.boolValue == false, let host {
+                peerAllowsUnauthenticated = message.fields["allow_unauthenticated"]?.boolValue ?? false
+                // Both halves, or nothing. An unpaired PC that offers the downgrade to a
+                // phone which did not ask is still a pairing gate, not an open door.
+                unauthenticatedSessionNegotiated =
+                    allowsUnauthenticatedConnections && peerAllowsUnauthenticated
+                if unauthenticatedSessionNegotiated {
+                    RemoteCamLog.info("session", "both ends allow unauthenticated connections")
+                } else if message.fields["paired"]?.boolValue == false, let host {
                     updatePhase(.awaitingPairing(host))
                 }
             case "pair_required":
@@ -269,7 +288,7 @@ final class RemoteCamSession: ObservableObject {
                     intentionalDisconnect = true
                     reconnectTask?.cancel()
                     transport.cancel()
-                    updatePhase(.failed("The server tried to start an unauthenticated session. Secure pairing must complete first."))
+                    updatePhase(.failed(untrustedReadyReason))
                     return
                 }
                 guard let configuration = Self.configuration(from: message), let host else {
@@ -359,7 +378,22 @@ final class RemoteCamSession: ObservableObject {
     }
 
     private var sessionIsTrusted: Bool {
-        controlChannelAuthenticated || allowsInsecureDevelopmentSession
+        controlChannelAuthenticated || unauthenticatedSessionNegotiated
+            || allowsInsecureDevelopmentSession
+    }
+
+    /// Reaching here means the PC sent `ready` without either side having agreed to it.
+    /// Naming the end that refused turns an unexplained failure into one action.
+    private var untrustedReadyReason: String {
+        if peerAllowsUnauthenticated && !allowsUnauthenticatedConnections {
+            return "The Windows computer allows connections without pairing, but this iPhone does not. "
+                + "Enable \"Allow connecting without pairing\" here to connect."
+        }
+        if allowsUnauthenticatedConnections && !peerAllowsUnauthenticated {
+            return "This iPhone allows connections without pairing, but the Windows computer does not. "
+                + "Enable the matching option in the RemoteCam desktop app."
+        }
+        return "The server tried to start an unauthenticated session. Secure pairing must complete first."
     }
 
     private static var monotonicMicros: UInt64 {
