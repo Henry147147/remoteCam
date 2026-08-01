@@ -176,6 +176,10 @@ ApplicationWindow {
                         Accessible.name: text
                         Layout.fillWidth: true
                         text: sessionStatus.detail
+                        // This string carries the phone's self-reported device name, and
+                        // on the unauthenticated path that phone proved nothing. AutoText
+                        // would sniff markup in it and render links and images.
+                        textFormat: Text.PlainText
                         color: "#b5c0d1"
                         font.pixelSize: 13
                         wrapMode: Text.WordWrap

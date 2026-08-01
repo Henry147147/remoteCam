@@ -36,6 +36,14 @@ QString registrationError(DWORD status) {
       .arg(status, 8, 16, QLatin1Char('0'));
 }
 
+// DnsServiceDeRegister is asynchronous, so both the request and the instance it points
+// at must outlive the call -- the same reason start() keeps request_ and instance_ as
+// members. The completion callback owns this and frees it.
+struct PendingDeregistration {
+  DNS_SERVICE_REGISTER_REQUEST request{};
+  PDNS_SERVICE_INSTANCE instance = nullptr;
+};
+
 QString loadOrCreateServiceID() {
   QSettings settings;
   const QRegularExpression validID(QStringLiteral("^[0-9a-f]{16}$"));
@@ -101,6 +109,9 @@ QString BonjourAdvertiser::statusLabel() const {
 void BonjourAdvertiser::start() {
   if (callbackPending_ || state_ == AdvertisementState::Advertising) return;
 
+  // main.cpp only reaches here once the listener is bound, which is what makes a later
+  // restart() safe to honour.
+  receiverReady_ = true;
   state_ = AdvertisementState::Starting;
   statusDetail_ = QStringLiteral("Advertising %1 on TCP port %2...")
                       .arg(computerName_)
@@ -164,6 +175,10 @@ void BonjourAdvertiser::start() {
 
 void BonjourAdvertiser::restart() {
   if (callbackPending_) return;
+  // Never re-advertise a port nothing is listening on. Re-registering after a bind
+  // failure produces the false-success discovery result main.cpp warns about: the phone
+  // finds the PC and every connection times out.
+  if (!receiverReady_) return;
   // Nothing but a de-register removes the old record; Windows otherwise keeps it until
   // the process exits, so a plain re-register would leave two instances on the link.
   if (state_ == AdvertisementState::Advertising) deregister();
@@ -175,33 +190,41 @@ void BonjourAdvertiser::restart() {
 void BonjourAdvertiser::deregister() {
   const std::wstring instanceName = instanceName_.toStdWString();
   const std::wstring hostName = hostName_.toStdWString();
-  PDNS_SERVICE_INSTANCE instance = ::DnsServiceConstructInstance(
+  auto* pending = new PendingDeregistration;
+  pending->instance = ::DnsServiceConstructInstance(
       instanceName.c_str(), hostName.c_str(), nullptr, nullptr, kDefaultPort, 0, 0, 0,
       nullptr, nullptr);
-  if (!instance) return;
+  if (!pending->instance) {
+    delete pending;
+    return;
+  }
 
-  DNS_SERVICE_REGISTER_REQUEST request{};
-  request.Version = DNS_QUERY_REQUEST_VERSION1;
-  request.InterfaceIndex = 0;
-  request.pServiceInstance = instance;
+  pending->request.Version = DNS_QUERY_REQUEST_VERSION1;
+  pending->request.InterfaceIndex = 0;
+  pending->request.pServiceInstance = pending->instance;
   // Best-effort withdrawal immediately followed by a fresh registration: we do not wait
   // for it, because blocking the UI thread on the DNS client would be worse than a stale
-  // record the re-registration overwrites. The callback still has to exist and free what
-  // Windows hands it, so it owns no advertiser state and cannot outlive anything.
-  request.pRegisterCompletionCallback = &BonjourAdvertiser::deregistrationComplete;
-  request.pQueryContext = nullptr;
-  request.unicastEnabled = FALSE;
-  const DWORD status = ::DnsServiceDeRegister(&request, nullptr);
-  if (status != DNS_REQUEST_PENDING && status != ERROR_SUCCESS) {
-    RC_WARN(L"DnsServiceDeRegister(%s) returned %s", instanceName.c_str(),
-            rcwin::hrMessage(HRESULT_FROM_WIN32(status)).c_str());
+  // record the re-registration overwrites. Not waiting is exactly why the request and
+  // instance are heap-owned by the callback rather than living on this stack frame.
+  pending->request.pRegisterCompletionCallback = &BonjourAdvertiser::deregistrationComplete;
+  pending->request.pQueryContext = pending;
+  pending->request.unicastEnabled = FALSE;
+  const DWORD status = ::DnsServiceDeRegister(&pending->request, nullptr);
+  if (status != DNS_REQUEST_PENDING) {
+    // The callback will not run, so nothing else will ever release this.
+    if (status != ERROR_SUCCESS) {
+      RC_WARN(L"DnsServiceDeRegister(%s) returned %s", instanceName.c_str(),
+              rcwin::hrMessage(HRESULT_FROM_WIN32(status)).c_str());
+    }
+    ::DnsServiceFreeInstance(pending->instance);
+    delete pending;
   }
-  ::DnsServiceFreeInstance(instance);
   state_ = AdvertisementState::WaitingForReceiver;
 }
 
 void BonjourAdvertiser::setReceiverFailure(const QString& detail) {
   if (callbackPending_ || state_ == AdvertisementState::Advertising) return;
+  receiverReady_ = false;
   setFailure(QStringLiteral("TCP port %1 is not listening: %2").arg(kDefaultPort).arg(detail));
 }
 
@@ -214,9 +237,15 @@ void BonjourAdvertiser::setTestLoopback() {
   emit stateChanged();
 }
 
-void WINAPI BonjourAdvertiser::deregistrationComplete(DWORD, void*,
+void WINAPI BonjourAdvertiser::deregistrationComplete(DWORD, void* queryContext,
                                                       PDNS_SERVICE_INSTANCE instance) {
   if (instance) ::DnsServiceFreeInstance(instance);
+  auto* pending = static_cast<PendingDeregistration*>(queryContext);
+  if (!pending) return;
+  // The DNS client is done with both by the time it calls back, so this is the earliest
+  // point at which either can be released.
+  if (pending->instance) ::DnsServiceFreeInstance(pending->instance);
+  delete pending;
 }
 
 void WINAPI BonjourAdvertiser::registrationComplete(DWORD status, void* queryContext,

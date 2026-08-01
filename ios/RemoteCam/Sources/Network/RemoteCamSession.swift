@@ -190,9 +190,7 @@ final class RemoteCamSession: ObservableObject {
         self.host = host
         self.endpoint = endpoint
         reconnectAttempt = 0
-        controlChannelAuthenticated = false
-        unauthenticatedSessionNegotiated = false
-        peerAllowsUnauthenticated = false
+        resetSessionTrust()
         videoSuspended = true
         updatePhase(.connecting(host))
         transport.connect(endpoint: endpoint)
@@ -337,8 +335,17 @@ final class RemoteCamSession: ObservableObject {
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }
+            // A new TCP connection is a new session. Without this, trust negotiated on the
+            // previous one carries over and a server that skips server_info inherits it.
+            self.resetSessionTrust()
             self.transport.connect(endpoint: endpoint)
         }
+    }
+
+    private func resetSessionTrust() {
+        controlChannelAuthenticated = false
+        unauthenticatedSessionNegotiated = false
+        peerAllowsUnauthenticated = false
     }
 
     private func updatePhase(_ phase: ConnectionPhase) {

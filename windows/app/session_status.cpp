@@ -55,7 +55,9 @@ void SessionStatus::applyEvent(QString kind, QString detail) {
     // Announced once, before ready. Latch it so every later label for this connection
     // keeps saying so instead of implying a secure session.
     unauthenticated_ = true;
-    peer_ = detail;
+    // Contains the phone's self-reported device name, bounded only by the 1 MiB control
+    // payload limit. Truncate before it reaches a wrapped label.
+    peer_ = detail.size() > 64 ? detail.left(61) + QStringLiteral("...") : detail;
   } else if (kind == QStringLiteral("session.timeout")) {
     stateLabel_ = QStringLiteral("Phone timed out");
     detail_ = detail;

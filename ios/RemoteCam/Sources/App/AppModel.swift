@@ -32,6 +32,11 @@ final class AppModel: ObservableObject {
         remoteSession.onPhaseChange = { [weak self] phase in
             guard let self else { return }
             connectionPhase = phase
+            if case .reconnecting = phase {
+                // The reconnect re-sends hello, so pick up a setting the user changed
+                // since the original connect instead of replaying the stale one.
+                remoteSession.allowsUnauthenticatedConnections = security.allowsUnauthenticatedConnections
+            }
             if case .reconnecting(let host, _) = phase, let configuration = currentConfiguration {
                 Task { await liveActivity.update(host: host, configuration: configuration, status: "Reconnecting") }
             }

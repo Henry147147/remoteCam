@@ -83,6 +83,9 @@ class BonjourAdvertiser final : public QObject {
   PDNS_SERVICE_INSTANCE instance_ = nullptr;
   RegistrationContext* context_ = nullptr;
   bool callbackPending_ = false;
+  // Set once the caller has actually bound the listener. restart() refuses without it,
+  // so Retry can never publish a service on a port nothing is accepting on.
+  bool receiverReady_ = false;
 };
 
 }  // namespace rcapp

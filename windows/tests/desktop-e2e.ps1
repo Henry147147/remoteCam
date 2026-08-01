@@ -68,6 +68,24 @@ function Set-AllowUnauthenticated($Value) {
         -PropertyType DWord -Force | Out-Null
 }
 
+# TCP 7890 is not bindable the instant the previous host exits. Without this wait, the
+# next host fails to listen and the checkpoint after it reports an unrelated harness
+# failure instead of the security-boundary result it is meant to measure.
+function Wait-PortAvailable([int]$Port, [int]$TimeoutMillis = 15000) {
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMillis)
+    do {
+        try {
+            $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+            $probe.Start()
+            $probe.Stop()
+            return $true
+        } catch {
+            Start-Sleep -Milliseconds 250
+        }
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $false
+}
+
 function Start-OwnedProcess([string]$FilePath, [string[]]$Arguments, [switch]$Visible) {
     $start = @{
         FilePath = $FilePath
@@ -282,6 +300,9 @@ try {
     Add-Check "Unauthenticated emulator" $(if ($negotiatedPhone.ExitCode -eq 0) { "pass" } else { "fail" }) "exit=$($negotiatedPhone.ExitCode)"
 
     Close-OwnedProcess $production
+    if (-not (Wait-PortAvailable 7890)) {
+        throw "TCP 7890 did not become bindable after the previous desktop host exited."
+    }
 
     # And the PC's own off-switch: the same opted-in phone must be refused.
     Set-AllowUnauthenticated 0
