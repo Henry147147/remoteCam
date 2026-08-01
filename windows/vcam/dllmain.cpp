@@ -12,7 +12,7 @@
 
 #include "rcwin/guids.h"
 #include "rcwin/hr.h"
-#include "media_source.h"
+#include "activation.h"
 #include "module_lock.h"
 
 namespace {
@@ -60,7 +60,7 @@ class ClassFactory final : public IClassFactory {
     // Aggregation is not supported and never will be: a media source has too much
     // internal threading for an outer object to safely control its lifetime.
     if (outer) return CLASS_E_NOAGGREGATION;
-    return rcvcam::MediaSource::CreateInstance(riid, ppv);
+    return rcvcam::Activation::CreateInstance(riid, ppv);
   }
 
   IFACEMETHODIMP LockServer(BOOL lock) override {

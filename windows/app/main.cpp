@@ -7,6 +7,7 @@
 #include <QUrl>
 #include <QWindow>
 #include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -28,6 +29,51 @@ namespace {
 
 constexpr wchar_t kProducerMutexName[] = L"Local\\RemoteCam.QtProducer.Single";
 
+DWORD runRegistrationHelper(const std::wstring& arguments) {
+  const std::filesystem::path appPath = rcwin::modulePath();
+  const std::filesystem::path helperPath = appPath.parent_path() / L"rc-vcam-register.exe";
+  if (::GetFileAttributesW(helperPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+    RC_ERR(L"startup registration helper is missing: %s", helperPath.c_str());
+    return ERROR_FILE_NOT_FOUND;
+  }
+
+  std::wstring command = L"\"" + helperPath.wstring() + L"\" " + arguments;
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process{};
+  if (!::CreateProcessW(helperPath.c_str(), command.data(), nullptr, nullptr, FALSE,
+                        CREATE_NO_WINDOW, nullptr, appPath.parent_path().c_str(), &startup,
+                        &process)) {
+    const DWORD error = ::GetLastError();
+    RC_ERR(L"could not start registration helper (%s): %s", arguments.c_str(),
+           rcwin::hrMessage(HRESULT_FROM_WIN32(error)).c_str());
+    return error;
+  }
+
+  ::WaitForSingleObject(process.hProcess, INFINITE);
+  DWORD exitCode = ERROR_GEN_FAILURE;
+  if (!::GetExitCodeProcess(process.hProcess, &exitCode)) exitCode = ::GetLastError();
+  ::CloseHandle(process.hThread);
+  ::CloseHandle(process.hProcess);
+  return exitCode;
+}
+
+void ensureMachineIntegration() {
+  if (runRegistrationHelper(L"--status") != ERROR_SUCCESS) {
+    const DWORD registerExit = runRegistrationHelper(L"--register");
+    if (registerExit != ERROR_SUCCESS) {
+      RC_ERR(L"automatic virtual-camera registration failed with exit code %lu", registerExit);
+    }
+  }
+
+  const std::wstring firewallArguments =
+      L"--firewall-add --app \"" + rcwin::modulePath() + L"\"";
+  const DWORD firewallExit = runRegistrationHelper(firewallArguments);
+  if (firewallExit != ERROR_SUCCESS) {
+    RC_ERR(L"automatic firewall configuration failed with exit code %lu", firewallExit);
+  }
+}
+
 #if defined(RC_APP_E2E_HOST)
 // Compiled only into RemoteCam-E2E.exe. The shipping RemoteCam.exe instantiates the
 // rejecting policy below and therefore contains no insecure trust implementation.
@@ -44,6 +90,7 @@ int main(int argc, char* argv[]) {
   QGuiApplication::setApplicationName(QStringLiteral("RemoteCam"));
   QGuiApplication::setOrganizationName(QStringLiteral("RemoteCam"));
   rcwin::logInit(L"rc-app");
+  ensureMachineIntegration();
 
   // FrameRing has a single-writer contract. Local\ is deliberate: this
   // coordinates ordinary app instances in the current user's session without
@@ -94,9 +141,7 @@ int main(int argc, char* argv[]) {
 #endif
   rcnet::TcpListener listener;
   bool testLoopback = false;
-#if defined(RC_APP_E2E_HOST)
-  testLoopback = true;
-#else
+#if !defined(RC_APP_E2E_HOST)
   for (int index = 1; index < argc; ++index) {
     if (std::string(argv[index]) == "--test-loopback") testLoopback = true;
   }

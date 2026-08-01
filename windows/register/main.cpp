@@ -532,7 +532,7 @@ HRESULT reportEnumeration(const wchar_t* expectedSymbolicLink = nullptr) {
     const bool nameMatches = SUCCEEDED(nameHr) && name != nullptr &&
                              wcscmp(name, rcwin::kFriendlyName) == 0;
     const bool linkMatches = expectedSymbolicLink != nullptr && symbolicLink != nullptr &&
-                             wcscmp(symbolicLink, expectedSymbolicLink) == 0;
+                             _wcsicmp(symbolicLink, expectedSymbolicLink) == 0;
     const bool ours = expectedSymbolicLink != nullptr ? linkMatches : nameMatches;
     found = found || ours;
     if (name != nullptr) {

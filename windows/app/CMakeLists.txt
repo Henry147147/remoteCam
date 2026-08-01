@@ -48,6 +48,10 @@ target_link_libraries(rc-app PRIVATE
 
 target_compile_features(rc-app PRIVATE cxx_std_20)
 rc_target_strict_warnings(rc-app)
+if(MSVC)
+    target_link_options(rc-app PRIVATE
+        "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'")
+endif()
 
 set_target_properties(rc-app PROPERTIES
     OUTPUT_NAME RemoteCam
@@ -92,6 +96,10 @@ if(RC_BUILD_TESTS)
     )
     target_compile_features(rc-e2e PRIVATE cxx_std_20)
     rc_target_strict_warnings(rc-e2e)
+    if(MSVC)
+        target_link_options(rc-e2e PRIVATE
+            "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'")
+    endif()
     set_target_properties(rc-e2e PROPERTIES
         OUTPUT_NAME RemoteCam-E2E
         WIN32_EXECUTABLE TRUE

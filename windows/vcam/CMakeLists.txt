@@ -6,6 +6,8 @@
 # alive.
 
 add_library(rc-vcam SHARED
+    activation.cpp
+    activation.h
     dllmain.cpp
     frame_source.cpp
     media_format.cpp
